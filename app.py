@@ -54,7 +54,9 @@ else:
     st.error("❌ The result suggests B may not be better than A.")
 
 st.write(f"**Estimated Mean Uplift:** {mean_uplift:.2%}")
+st.caption("This is the average uplift between B and A based on thousands of sampled outcomes. A positive value indicates that B tends to perform better.")
 st.write(f"**95% Credible Interval:** [{ci_lower:.2%}, {ci_upper:.2%}]")
+st.caption("This is the range within which we believe the true uplift likely falls, based on the data and model. If the interval includes 0, there is uncertainty about whether B is truly better.")
 
 # --- Stakeholder Interpretation ---
 if ci_lower > 0:
