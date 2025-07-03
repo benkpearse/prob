@@ -46,7 +46,7 @@ mean_uplift = np.mean(uplift_samples)
 ci_lower, ci_upper = np.percentile(
     uplift_samples,
     [(100 - credibility) / 2, 100 - (100 - credibility) / 2]
-)  # {credibility}% credible interval
+)
 
 # --- Output ---
 st.subheader("Results")
@@ -69,19 +69,19 @@ st.caption("This is the range within which we believe the true uplift likely fal
 
 # --- Stakeholder Interpretation ---
 if ci_lower > 0:
-    st.success(f"With a mean uplift of {mean_uplift:.2%} and a 95% credible interval from {ci_lower:.2%} to {ci_upper:.2%}, it's highly likely that Variant B is performing better than Variant A. The entire interval is above 0, supporting a real and positive improvement.")
+    st.success(f"With a mean uplift of {mean_uplift:.2%} and a {credibility}% credible interval from {ci_lower:.2%} to {ci_upper:.2%}, it's highly likely that Variant B is performing better than Variant A. The entire interval is above 0, supporting a real and positive improvement.")
 elif ci_upper < 0:
-    st.error(f"The test suggests a mean uplift of {mean_uplift:.2%}, but the 95% credible interval ranges from {ci_lower:.2%} to {ci_upper:.2%}, entirely below zero. This strongly indicates that Variant B is likely worse than A.")
+    st.error(f"The test suggests a mean uplift of {mean_uplift:.2%}, but the {credibility}% credible interval ranges from {ci_lower:.2%} to {ci_upper:.2%}, entirely below zero. This strongly indicates that Variant B is likely worse than A.")
 else:
-    st.warning(f"The estimated mean uplift is {mean_uplift:.2%}, but the 95% credible interval spans from {ci_lower:.2%} to {ci_upper:.2%}, which includes zero. This means there's still uncertainty about whether Variant B is truly better or worse than A. More data may be needed to draw a clear conclusion.")
+    st.warning(f"The estimated mean uplift is {mean_uplift:.2%}, but the {credibility}% credible interval spans from {ci_lower:.2%} to {ci_upper:.2%}, which includes zero. This means there's still uncertainty about whether Variant B is truly better or worse than A. More data may be needed to draw a clear conclusion.")
 
 # --- Plotting ---
 
 with st.expander("ℹ️ What do these graphs show?"):
-    st.markdown("""
+    st.markdown(f"""
 - **Posterior Distributions** (left): These histograms represent our updated beliefs about the true conversion rates for Variant A and Variant B, based on the observed data and priors. The more separation you see between the two curves, the stronger the evidence of a real difference.
 
-- **Estimated Uplift Distribution** (right): This shows the distribution of possible uplift values (how much better B is than A). The black line is the estimated mean uplift, and the red dashed lines represent the 95% credible interval.
+- **Estimated Uplift Distribution** (right): This shows the distribution of possible uplift values (how much better B is than A). The black line is the estimated mean uplift, and the red dashed lines represent the {credibility}% credible interval.
 
 These visualizations help you assess not just whether B is likely better, but also how *much* better it could be — and with what certainty.
     """)
@@ -99,4 +99,3 @@ ax[1].axvline(mean_uplift, color='black')
 ax[1].set_title("Estimated Uplift Distribution")
 
 st.pyplot(fig)
-
