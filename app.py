@@ -17,6 +17,9 @@ Provide your test results below to get:
 # --- Interpretation Mode ---
 mode = st.radio("Interpretation Strictness", ["Strict", "Lenient"], horizontal=True, help="Strict mode requires both high probability and credible interval fully above 0 to conclude B is better. Lenient mode considers only probability.")
 
+# --- Credible Interval Setting ---
+credibility = st.slider("Credible Interval (%)", min_value=90, max_value=99, value=95, step=1, help="Choose how confident you want to be in the credible interval. 95% is common, but you can lower it to make the interval narrower.")
+
 # --- Inputs ---
 st.subheader("Enter Your Results")
 n_A = st.number_input("Sample size - Variant A", min_value=1, value=1000, step=1)
@@ -40,7 +43,10 @@ samples_B = post_B.rvs(samples)
 uplift_samples = (samples_B - samples_A) / samples_A
 prob_B_better = np.mean(samples_B > samples_A)
 mean_uplift = np.mean(uplift_samples)
-ci_lower, ci_upper = np.percentile(uplift_samples, [2.5, 97.5])  # 95% credible interval
+ci_lower, ci_upper = np.percentile(
+    uplift_samples,
+    [(100 - credibility) / 2, 100 - (100 - credibility) / 2]
+)  # {credibility}% credible interval
 
 # --- Output ---
 st.subheader("Results")
@@ -58,7 +64,7 @@ else:
 
 st.write(f"**Estimated Mean Uplift:** {mean_uplift:.2%} 🛈")
 st.caption("This is the average uplift between B and A based on thousands of sampled outcomes. A positive value indicates that B tends to perform better.")
-st.write(f"**95% Credible Interval:** [{ci_lower:.2%}, {ci_upper:.2%}] 🛈")
+st.write(f"**{credibility}% Credible Interval:** [{ci_lower:.2%}, {ci_upper:.2%}] 🛈")
 st.caption("This is the range within which we believe the true uplift likely falls, based on the data and model. If the interval includes 0, there is uncertainty about whether B is truly better.")
 
 # --- Stakeholder Interpretation ---
@@ -93,3 +99,4 @@ ax[1].axvline(mean_uplift, color='black')
 ax[1].set_title("Estimated Uplift Distribution")
 
 st.pyplot(fig)
+
