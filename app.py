@@ -44,7 +44,7 @@ st.subheader("Results")
 
 st.write(f"**Probability B is better than A:** {prob_B_better:.2%}")
 
-if prob_B_better > 0.95:
+if prob_B_better > 0.95 and ci_lower > 0:
     st.success("✅ This result is conclusive.")
 elif prob_B_better > 0.90:
     st.info("ℹ️ There is moderate confidence that B is better.")
