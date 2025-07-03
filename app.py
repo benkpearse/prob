@@ -37,7 +37,7 @@ samples_B = post_B.rvs(samples)
 uplift_samples = (samples_B - samples_A) / samples_A
 prob_B_better = np.mean(samples_B > samples_A)
 mean_uplift = np.mean(uplift_samples)
-ci_lower, ci_upper = np.percentile(uplift_samples, [2.5, 97.5])
+ci_lower, ci_upper = np.percentile(uplift_samples, [2.5, 97.5])  # 95% credible interval
 
 # --- Output ---
 st.subheader("Results")
@@ -45,14 +45,24 @@ st.subheader("Results")
 st.write(f"**Probability B is better than A:** {prob_B_better:.2%}")
 
 if prob_B_better > 0.95:
-    st.success("This result is statistically convincing.")
+    st.success("✅ This result is conclusive.")
 elif prob_B_better > 0.90:
-    st.info("There is moderate confidence in B being better.")
+    st.info("ℹ️ There is moderate confidence that B is better.")
+elif prob_B_better > 0.75:
+    st.warning("⚠️ The evidence is weak or inconclusive.")
 else:
-    st.warning("The evidence is weak or inconclusive.")
+    st.error("❌ The result suggests B may not be better than A.")
 
 st.write(f"**Estimated Mean Uplift:** {mean_uplift:.2%}")
 st.write(f"**95% Credible Interval:** [{ci_lower:.2%}, {ci_upper:.2%}]")
+
+# --- Stakeholder Interpretation ---
+if ci_lower > 0:
+    st.success(f"With a mean uplift of {mean_uplift:.2%} and a 95% credible interval from {ci_lower:.2%} to {ci_upper:.2%}, it's highly likely that Variant B is performing better than Variant A. The entire interval is above 0, supporting a real and positive improvement.")
+elif ci_upper < 0:
+    st.error(f"The test suggests a mean uplift of {mean_uplift:.2%}, but the 95% credible interval ranges from {ci_lower:.2%} to {ci_upper:.2%}, entirely below zero. This strongly indicates that Variant B is likely worse than A.")
+else:
+    st.warning(f"The estimated mean uplift is {mean_uplift:.2%}, but the 95% credible interval spans from {ci_lower:.2%} to {ci_upper:.2%}, which includes zero. This means there's still uncertainty about whether Variant B is truly better or worse than A. More data may be needed to draw a clear conclusion.")
 
 # --- Plotting ---
 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
@@ -68,5 +78,3 @@ ax[1].axvline(mean_uplift, color='black')
 ax[1].set_title("Estimated Uplift Distribution")
 
 st.pyplot(fig)
-
-st.markdown("---")
