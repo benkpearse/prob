@@ -22,15 +22,19 @@ credibility = st.slider("Credible Interval (%)", min_value=90, max_value=99, val
 
 # --- Inputs ---
 st.subheader("Enter Your Results")
-n_A = st.number_input("Sample size - Variant A", min_value=1, value=1000, step=1)
-conv_A = st.number_input("Conversions - Variant A", min_value=0, max_value=int(n_A), value=min(50, int(n_A)), step=1)
+with st.form("input_form"):
+    n_A = st.number_input("Sample size - Variant A", min_value=1, value=1000, step=1)
+    conv_A = st.number_input("Conversions - Variant A", min_value=0, max_value=int(n_A), value=min(50, int(n_A)), step=1)
 
-n_B = st.number_input("Sample size - Variant B", min_value=1, value=1000, step=1)
-conv_B = st.number_input("Conversions - Variant B", min_value=0, max_value=int(n_B), value=min(60, int(n_B)), step=1)
+    n_B = st.number_input("Sample size - Variant B", min_value=1, value=1000, step=1)
+    conv_B = st.number_input("Conversions - Variant B", min_value=0, max_value=int(n_B), value=min(60, int(n_B)), step=1)
 
-alpha_prior = 1
-beta_prior = 1
-samples = 10000
+    submitted = st.form_submit_button("Update Results")
+
+if submitted:
+    alpha_prior = 1
+    beta_prior = 1
+    samples = 10000
 
 
 # --- Posteriors ---
