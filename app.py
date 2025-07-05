@@ -28,6 +28,14 @@ conv_A = st.number_input("Conversions - Variant A", min_value=0, value=min(50, i
 n_B = st.number_input("Sample size - Variant B", min_value=1, value=1000, step=1, key="n_B")
 conv_B = st.number_input("Conversions - Variant B", min_value=0, value=min(60, int(n_B)), step=1, key="conv_B")
 
+# --- Validation ---
+if conv_A > n_A:
+    st.error("Conversions for Variant A cannot exceed its sample size.")
+    st.stop()
+if conv_B > n_B:
+    st.error("Conversions for Variant B cannot exceed its sample size.")
+    st.stop()
+
 alpha_prior = 1
 beta_prior = 1
 samples = 10000
