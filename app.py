@@ -36,6 +36,19 @@ if conv_B > n_B:
     st.error("Conversions for Variant B cannot exceed its sample size.")
     st.stop()
 
+# --- Sample Ratio Mismatch Check ---
+expected_ratio = 0.5
+actual_ratio = n_A / (n_A + n_B)
+if abs(actual_ratio - expected_ratio) > 0.05:
+    st.warning("Sample Ratio Mismatch detected. ⚠️ The sample sizes for A and B differ more than expected.")
+    with st.expander("ℹ️ What is a Sample Ratio Mismatch?"):
+        st.markdown("""
+        A **Sample Ratio Mismatch (SRM)** occurs when the number of users allocated to each variant is significantly different from what you expected — typically a 50/50 split in an A/B test.
+
+        This can indicate a problem with randomization, test assignment logic, or user targeting. SRM can bias your test results and reduce the validity of your conclusions.
+        """)
+
+
 alpha_prior = 1
 beta_prior = 1
 samples = 10000
