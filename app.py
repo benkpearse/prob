@@ -52,8 +52,8 @@ if SRM_detected:
         """)
 
 
-alpha_prior = 1
-beta_prior = 1
+alpha_prior = 1 + conv_A
+beta_prior = 1 + n_A - conv_A
 samples = 10000
 
 
