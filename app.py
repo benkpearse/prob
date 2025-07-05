@@ -41,13 +41,14 @@ expected_ratio = 0.5
 actual_ratio = n_A / (n_A + n_B)
 SRM_detected = abs(actual_ratio - expected_ratio) > 0.05
 if SRM_detected:
+    st.error("🚫 Sample Ratio Mismatch detected. This test should be considered inconclusive and must be re-run.")
     with st.expander("ℹ️ What is a Sample Ratio Mismatch?"):
         st.markdown("""
         A **Sample Ratio Mismatch (SRM)** occurs when the number of users allocated to each variant is significantly different from what you expected — typically a 50/50 split in an A/B test.
 
         This can indicate a problem with randomization, test assignment logic, or user targeting. SRM can bias your test results and reduce the validity of your conclusions.
 
-        **Best Practice:** Pause the test, investigate the allocation logic, and re-run it once fixed. This test's results may be biased. Proceed with caution or consider re-running the test.
+        **Best Practice:** Pause the test, investigate the allocation logic, and re-run it once fixed. This test's results should be discarded. SRM breaks the assumptions of random assignment and renders the outcome invalid.
         """)
 
 
