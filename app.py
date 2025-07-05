@@ -36,8 +36,9 @@ samples = 10000
 post_A = beta(alpha_prior + conv_A, beta_prior + n_A - conv_A)
 post_B = beta(alpha_prior + conv_B, beta_prior + n_B - conv_B)
 
-samples_A = post_A.rvs(samples)
-samples_B = post_B.rvs(samples)
+rng = np.random.default_rng(seed=42)
+samples_A = post_A.rvs(samples, random_state=rng)
+samples_B = post_B.rvs(samples, random_state=rng)
 
 # --- Calculations ---
 uplift_samples = (samples_B - samples_A) / samples_A
