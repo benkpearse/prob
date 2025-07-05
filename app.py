@@ -21,19 +21,17 @@ mode = st.radio("Interpretation Strictness", ["Strict", "Lenient"], horizontal=T
 credibility = st.slider("Credible Interval (%)", min_value=90, max_value=99, value=95, step=1, help="Choose how confident you want to be in the credible interval. 95% is common, but you can lower it to make the interval narrower.")
 
 # --- Inputs ---
-with st.form("user_input_form"):
-    st.subheader("Enter Your Results")
-    n_A = st.number_input("Sample size - Variant A", min_value=1, value=1000, step=1)
-    conv_A = st.number_input("Conversions - Variant A", min_value=0, max_value=n_A, value=50, step=1)
+st.subheader("Enter Your Results")
+n_A = st.number_input("Sample size - Variant A", min_value=1, value=1000, step=1)
+conv_A = st.number_input("Conversions - Variant A", min_value=0, max_value=int(n_A), value=min(50, int(n_A)), step=1)
 
-    n_B = st.number_input("Sample size - Variant B", min_value=1, value=1000, step=1)
-    conv_B = st.number_input("Conversions - Variant B", min_value=0, max_value=n_B, value=60, step=1)
-
-    submitted = st.form_submit_button("Update Results")
+n_B = st.number_input("Sample size - Variant B", min_value=1, value=1000, step=1)
+conv_B = st.number_input("Conversions - Variant B", min_value=0, max_value=int(n_B), value=min(60, int(n_B)), step=1)
 
 alpha_prior = 1
 beta_prior = 1
 samples = 10000
+
 
 # --- Posteriors ---
 post_A = beta(alpha_prior + conv_A, beta_prior + n_A - conv_A)
