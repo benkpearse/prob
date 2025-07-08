@@ -2,6 +2,8 @@ import streamlit as st
 import numpy as np
 from scipy.stats import beta
 import matplotlib.pyplot as plt
+from scipy.stats import chisquare
+
 
 st.title("Bayesian Uplift Certainty Estimator")
 
@@ -36,12 +38,14 @@ if conv_B > n_B:
     st.error("Conversions for Variant B cannot exceed its sample size.")
     st.stop()
 
-# --- Sample Ratio Mismatch Check ---
-expected_ratio = 0.5
-actual_ratio = n_A / (n_A + n_B)
-SRM_detected = abs(actual_ratio - expected_ratio) > 0.05
-if SRM_detected:
-    st.error("🚫 Sample Ratio Mismatch detected. This test should be considered inconclusive and must be re-run.")
+# --- Sample Ratio Mismatch Check using Chi-square Test ---
+observed = [n_A, n_B]
+total = n_A + n_B
+expected = [total / 2, total / 2]
+chi2_stat, p_value = chisquare(f_obs=observed, f_exp=expected)
+
+if p_value < 0.01:
+    st.error("🚫 Sample Ratio Mismatch detected via Chi-square test (p < 0.01).")
     with st.expander("ℹ️ What is a Sample Ratio Mismatch?"):
         st.markdown("""
         A **Sample Ratio Mismatch (SRM)** occurs when the number of users allocated to each variant is significantly different from what you expected — typically a 50/50 split in an A/B test.
