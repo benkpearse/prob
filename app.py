@@ -135,21 +135,45 @@ with st.expander("ℹ️ What do these graphs show?"):
 - **Estimated Uplift Distribution** (right): This histogram shows the distribution of possible uplift values (how much better B is than A) based on the simulation. The black line is the estimated mean uplift, and the red dashed lines show the {credibility}% credible interval.
     """)
 
-fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-# Plot posteriors
-x = np.linspace(0, 1, 1000)
-ax[0].plot(x, post_A.pdf(x), label='A')
-ax[0].plot(x, post_B.pdf(x), label='B')
-ax[0].set_title("Posterior Distributions")
-ax[0].legend()
+# Create a figure with two subplots
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+plt.style.use('seaborn-v0_8-whitegrid') # Use a nice style
 
-# Plot uplift distribution
-ax[1].hist(uplift_samples, bins=50, color='purple', alpha=0.7)
-ax[1].axvline(ci_lower, color='red', linestyle='--')
+# --- 1. Posterior Distributions Plot (Left) ---
+x = np.linspace(0, 1, 1000)
+
+# Plot smooth PDFs for A and B
+ax[0].plot(x, post_A.pdf(x), label='Variant A', color='royalblue')
+ax[0].fill_between(x, post_A.pdf(x), alpha=0.3, color='royalblue')
+ax[0].plot(x, post_B.pdf(x), label='Variant B', color='darkorange')
+ax[0].fill_between(x, post_B.pdf(x), alpha=0.3, color='darkorange')
+
+# Dynamically set the x-axis limits to zoom in on the interesting area
+lower_bound = min(post_A.ppf(0.001), post_B.ppf(0.001))
+upper_bound = max(post_A.ppf(0.999), post_B.ppf(0.999))
+ax[0].set_xlim(lower_bound, upper_bound)
+
+ax[0].set_title("Posterior Distributions", fontsize=14)
+ax[0].set_xlabel("Conversion Rate", fontsize=12)
+ax[0].set_ylabel("Density", fontsize=12)
+ax[0].legend()
+ax[0].xaxis.set_major_formatter(plt.FuncFormatter('{:.2%}'.format))
+
+
+# --- 2. Estimated Uplift Distribution Plot (Right) ---
+# Normalize histogram to show density
+ax[1].hist(uplift_samples, bins=50, color='purple', alpha=0.7, density=True)
+
+# Add vertical lines for credible interval and mean
+ax[1].axvline(ci_lower, color='red', linestyle='--', label=f'{credibility}% Credible Interval')
 ax[1].axvline(ci_upper, color='red', linestyle='--')
-ax[1].axvline(mean_uplift, color='black')
-ax[1].set_title("Estimated Uplift Distribution")
+ax[1].axvline(mean_uplift, color='black', linestyle='-', label='Mean Uplift')
+
+ax[1].set_title("Estimated Uplift Distribution", fontsize=14)
+ax[1].set_xlabel("Relative Uplift", fontsize=12)
+ax[1].legend()
 ax[1].xaxis.set_major_formatter(plt.FuncFormatter('{:.1%}'.format))
 
-
+# Improve layout and display the plot
+fig.tight_layout(pad=3.0)
 st.pyplot(fig)
