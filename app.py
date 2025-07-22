@@ -1,9 +1,18 @@
 import streamlit as st
 import numpy as np
-from scipy.stats import beta
+from scipy.stats import beta, chisquare
+from scipy import integrate
 import matplotlib.pyplot as plt
-from scipy.stats import chisquare
 
+# --- Analytical Function for P(B > A) ---
+def prob_B_superior(alpha_A, beta_A, alpha_B, beta_B):
+    """
+    Calculates the exact probability P(B > A) using numerical integration.
+    """
+    integrand = lambda y: beta.pdf(y, alpha_B, beta_B) * beta.cdf(y, alpha_A, beta_A)
+    # The result is the integral of the integrand from 0 to 1
+    result, _ = integrate.quad(integrand, 0, 1)
+    return result
 
 st.title("Bayesian Uplift Certainty Estimator")
 
@@ -11,16 +20,16 @@ st.markdown("""
 This tool estimates the **certainty of uplift** between two variants (A and B) using Bayesian posterior inference.
 
 Provide your test results below to get:
-- Probability that **B is better than A**
-- Estimated **uplift and credible interval**
-- Visualization of posterior distributions
+- A precise, analytical probability that **B is better than A**.
+- The estimated **uplift and its credible interval**.
+- Visualizations of the posterior distributions.
 """)
 
 # --- Interpretation Mode ---
-mode = st.radio("Interpretation Strictness", ["Strict", "Lenient"], horizontal=True, help="Strict mode requires both high probability and credible interval fully above 0 to conclude B is better. Lenient mode considers only probability.")
+mode = st.radio("Interpretation Strictness", ["Strict", "Lenient"], horizontal=True, help="Strict mode requires both high probability and the credible interval to be fully above 0 to conclude B is better. Lenient mode considers only the probability.")
 
 # --- Credible Interval Setting ---
-credibility = st.slider("Credible Interval (%)", min_value=90, max_value=99, value=95, step=1, help="Choose how confident you want to be in the credible interval. 95% is common, but you can lower it to make the interval narrower.")
+credibility = st.slider("Credible Interval (%)", min_value=90, max_value=99, value=95, step=1, help="Choose how confident you want to be in the credible interval. 95% is common.")
 
 # --- Inputs ---
 st.subheader("Enter Your Results")
@@ -48,30 +57,39 @@ if p_value < 0.01:
     st.error("🚫 Sample Ratio Mismatch detected via Chi-square test (p < 0.01).")
     with st.expander("ℹ️ What is a Sample Ratio Mismatch?"):
         st.markdown("""
-        A **Sample Ratio Mismatch (SRM)** occurs when the number of users allocated to each variant is significantly different from what you expected — typically a 50/50 split in an A/B test.
+        A **Sample Ratio Mismatch (SRM)** occurs when the number of users allocated to each variant is significantly different from what you expected—typically a 50/50 split in an A/B test.
 
         This can indicate a problem with randomization, test assignment logic, or user targeting. SRM can bias your test results and reduce the validity of your conclusions.
 
-        **Best Practice:** Pause the test, investigate the allocation logic, and re-run it once fixed. This test's results should be discarded. SRM breaks the assumptions of random assignment and renders the outcome invalid.
+        **Best Practice:** Pause the test, investigate the allocation logic, and re-run it once fixed. This test's results should be discarded as SRM breaks the assumptions of random assignment.
         """)
 
 
+# --- Priors & Samples ---
 alpha_prior = 1
 beta_prior = 1
 samples = 10000
 
+# --- Posterior Calculations ---
+# Define posterior alpha and beta values
+alpha_A_post = alpha_prior + conv_A
+beta_A_post = beta_prior + n_A - conv_A
+alpha_B_post = alpha_prior + conv_B
+beta_B_post = beta_prior + n_B - conv_B
 
-# --- Posteriors ---
-post_A = beta(alpha_prior + conv_A, beta_prior + n_A - conv_A)
-post_B = beta(alpha_prior + conv_B, beta_prior + n_B - conv_B)
+# --- Main Calculations ---
+# 1. Use the analytical function for a precise P(B > A)
+prob_B_better = prob_B_superior(alpha_A_post, beta_A_post, alpha_B_post, beta_B_post)
 
+# 2. Use simulation to get distributions for uplift and plotting
+post_A = beta(alpha_A_post, beta_A_post)
+post_B = beta(alpha_B_post, beta_B_post)
 rng = np.random.default_rng(seed=42)
 samples_A = post_A.rvs(samples, random_state=rng)
 samples_B = post_B.rvs(samples, random_state=rng)
 
-# --- Calculations ---
+# Calculate uplift distribution and credible intervals from samples
 uplift_samples = (samples_B - samples_A) / samples_A
-prob_B_better = np.mean(samples_B > samples_A)
 mean_uplift = np.mean(uplift_samples)
 ci_lower, ci_upper = np.percentile(
     uplift_samples,
@@ -81,7 +99,9 @@ ci_lower, ci_upper = np.percentile(
 # --- Output ---
 st.subheader("Results")
 
-st.write(f"**Probability B is better than A:** {prob_B_better:.2%}")
+st.metric(label="Probability B is better than A", value=f"{prob_B_better:.2%}")
+st.caption("Calculated analytically for high precision.")
+
 
 if (mode == "Strict" and prob_B_better > 0.95 and ci_lower > 0) or (mode == "Lenient" and prob_B_better > 0.95):
     st.success("✅ This result is conclusive.")
@@ -92,40 +112,44 @@ elif prob_B_better > 0.75:
 else:
     st.error("❌ The result suggests B may not be better than A.")
 
-st.write(f"**Estimated Mean Uplift:** {mean_uplift:.2%} 🛈")
-st.caption("This is the average uplift between B and A based on thousands of sampled outcomes. A positive value indicates that B tends to perform better.")
-st.write(f"**{credibility}% Credible Interval:** [{ci_lower:.2%}, {ci_upper:.2%}] 🛈")
-st.caption("This is the range within which we believe the true uplift likely falls, based on the data and model. If the interval includes 0, there is uncertainty about whether B is truly better.")
+st.write(f"**Estimated Mean Uplift:** {mean_uplift:.2%}")
+st.write(f"**{credibility}% Credible Interval for Uplift:** [{ci_lower:.2%}, {ci_upper:.2%}]")
+st.caption("The uplift distribution is calculated via simulation.")
+
 
 # --- Stakeholder Interpretation ---
+st.subheader("Plain-Language Summary")
 if ci_lower > 0:
-    st.success(f"With a mean uplift of {mean_uplift:.2%} and a {credibility}% credible interval from {ci_lower:.2%} to {ci_upper:.2%}, it's highly likely that Variant B is performing better than Variant A. The entire interval is above 0, supporting a real and positive improvement.")
+    st.success(f"With a mean uplift of {mean_uplift:.2%} and the {credibility}% credible interval entirely above zero ({ci_lower:.2%} to {ci_upper:.2%}), it's highly likely that Variant B is performing better than Variant A.")
 elif ci_upper < 0:
-    st.error(f"The test suggests a mean uplift of {mean_uplift:.2%}, but the {credibility}% credible interval ranges from {ci_lower:.2%} to {ci_upper:.2%}, entirely below zero. This strongly indicates that Variant B is likely worse than A.")
+    st.error(f"The test suggests a negative uplift of {mean_uplift:.2%}. The {credibility}% credible interval is entirely below zero ({ci_lower:.2%} to {ci_upper:.2%}), strongly indicating that Variant B is likely performing worse than A.")
 else:
-    st.warning(f"The estimated mean uplift is {mean_uplift:.2%}, but the {credibility}% credible interval spans from {ci_lower:.2%} to {ci_upper:.2%}, which includes zero. This means there's still uncertainty about whether Variant B is truly better or worse than A. More data may be needed to draw a clear conclusion.")
+    st.warning(f"The estimated mean uplift is {mean_uplift:.2%}, but the {credibility}% credible interval spans from {ci_lower:.2%} to {ci_upper:.2%}, which includes zero. This means we cannot be certain that Variant B is truly better or worse than A.")
 
 # --- Plotting ---
-
+st.subheader("Visualizations")
 with st.expander("ℹ️ What do these graphs show?"):
     st.markdown(f"""
-- **Posterior Distributions** (left): These histograms represent our updated beliefs about the true conversion rates for Variant A and Variant B, based on the observed data and priors. The more separation you see between the two curves, the stronger the evidence of a real difference.
+- **Posterior Distributions** (left): These curves represent our updated beliefs about the true conversion rates for Variant A and Variant B. The more separation you see between them, the stronger the evidence of a real difference.
 
-- **Estimated Uplift Distribution** (right): This shows the distribution of possible uplift values (how much better B is than A). The black line is the estimated mean uplift, and the red dashed lines represent the {credibility}% credible interval.
-
-These visualizations help you assess not just whether B is likely better, but also how *much* better it could be — and with what certainty.
+- **Estimated Uplift Distribution** (right): This histogram shows the distribution of possible uplift values (how much better B is than A) based on the simulation. The black line is the estimated mean uplift, and the red dashed lines show the {credibility}% credible interval.
     """)
 
 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-ax[0].hist(samples_A, bins=50, alpha=0.6, label='A')
-ax[0].hist(samples_B, bins=50, alpha=0.6, label='B')
+# Plot posteriors
+x = np.linspace(0, 1, 1000)
+ax[0].plot(x, post_A.pdf(x), label='A')
+ax[0].plot(x, post_B.pdf(x), label='B')
 ax[0].set_title("Posterior Distributions")
 ax[0].legend()
 
-ax[1].hist(uplift_samples, bins=50, color='purple')
+# Plot uplift distribution
+ax[1].hist(uplift_samples, bins=50, color='purple', alpha=0.7)
 ax[1].axvline(ci_lower, color='red', linestyle='--')
 ax[1].axvline(ci_upper, color='red', linestyle='--')
 ax[1].axvline(mean_uplift, color='black')
 ax[1].set_title("Estimated Uplift Distribution")
+ax[1].xaxis.set_major_formatter(plt.FuncFormatter('{:.1%}'.format))
+
 
 st.pyplot(fig)
