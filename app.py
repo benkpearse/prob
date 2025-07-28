@@ -20,13 +20,11 @@ def run_bayesian_analysis(n_A, conv_A, n_B, conv_B, credibility):
     alpha_prior, beta_prior = 1, 1
     samples = 20000
     
-    # Define posterior alpha and beta values
     alpha_A_post = alpha_prior + conv_A
     beta_A_post = beta_prior + n_A - conv_A
     alpha_B_post = alpha_prior + conv_B
     beta_B_post = beta_prior + n_B - conv_B
 
-    # Create posterior distribution objects for sampling
     post_A = beta(alpha_A_post, beta_A_post)
     post_B = beta(alpha_B_post, beta_B_post)
     
@@ -34,7 +32,6 @@ def run_bayesian_analysis(n_A, conv_A, n_B, conv_B, credibility):
     samples_A = post_A.rvs(samples, random_state=rng)
     samples_B = post_B.rvs(samples, random_state=rng)
 
-    # Calculate metrics from the simulation
     prob_B_better = np.mean(samples_B > samples_A)
     uplift_samples = (samples_B - samples_A) / samples_A
     mean_uplift = np.mean(uplift_samples)
@@ -87,11 +84,9 @@ with st.sidebar:
 st.markdown("---")
 
 if run_button:
-    # Input Validation
     if conv_A > n_A or conv_B > n_B:
         st.error("Conversions cannot exceed the sample size for a variant.")
     else:
-        # SRM Check
         observed = [n_A, n_B]
         total = n_A + n_B
         expected = [total / 2, total / 2]
@@ -106,7 +101,6 @@ if run_button:
             prob_B_better = results["prob_B_better"]
             ci_lower = results["ci_lower"]
 
-            # --- Display Results ---
             st.subheader("Results")
             st.metric(label="Probability B is better than A", value=f"{prob_B_better:.2%}")
             
@@ -121,7 +115,6 @@ if run_button:
             st.write(f"**Estimated Mean Uplift:** {results['mean_uplift']:.2%}")
             st.write(f"**{credibility}% Credible Interval for Uplift:** [{ci_lower:.2%}, {results['ci_upper']:.2%}]")
 
-            # --- Stakeholder Interpretation ---
             st.subheader("Plain-Language Summary")
             if ci_lower > 0:
                 st.success(f"With a mean uplift of {results['mean_uplift']:.2%}, it's highly likely that Variant B is performing better than A. The entire {credibility}% credible interval is above zero, supporting a real positive improvement.")
@@ -130,7 +123,6 @@ if run_button:
             else:
                 st.warning(f"The estimated uplift is {results['mean_uplift']:.2%}, but the credible interval includes zero. This means we cannot be certain that Variant B is truly better or worse than A.")
 
-            # --- Display Plot ---
             st.subheader("Visualizations")
             fig, ax = plt.subplots(1, 2, figsize=(12, 5))
             plt.style.use('seaborn-v0_8-whitegrid')
@@ -161,23 +153,24 @@ if run_button:
             
             fig.tight_layout(pad=3.0)
             st.pyplot(fig)
-
 else:
-    st.info("Adjust the parameters in the sidebar and click 'Run Analysis' to see the results.")
+    st.info("Adjust the parameters in the sidebar and click 'Run Analysis'.")
 
 # 5. Explanations Section
 st.markdown("---")
 with st.expander("ℹ️ How to interpret these results"):
     st.markdown("""
-    #### Probability B is better than A
-    This is the core output of the Bayesian analysis. It represents the probability that the true conversion rate of Variant B is higher than that of Variant A. A value of 95% means there is a 95% chance that B is an improvement.
-    
+    #### The Key Metrics
+    * **Probability B is better than A:** This is the core Bayesian output. A value of 95% means there's a 95% chance that Variant B's true conversion rate is higher than Variant A's.
+    * **Estimated Mean Uplift:** The average expected improvement of B over A based on the simulation.
+    * **Credible Interval:** The range where we are confident the *true* uplift lies. If a 95% credible interval is `[1%, 5%]`, we're 95% certain the real uplift is in that positive range.
+
     ---
-    #### Estimated Uplift & Credible Interval
-    - **Mean Uplift:** The average expected improvement of B over A.
-    - **Credible Interval:** The range in which the true uplift likely falls. A 95% credible interval of `[1%, 5%]` means we are 95% certain the true uplift is between 1% and 5%. If this interval does not include zero, it's a strong sign that a real effect exists.
-    
+    #### The Visualizations
+    * **Posterior Distributions (Left Graph):** These curves show our belief about the true conversion rate for each variant after seeing the data. **Look for separation:** the less the two curves overlap, the stronger the evidence for a real difference.
+    * **Estimated Uplift Distribution (Right Graph):** This shows the range of possible uplift values. **Check if it crosses zero:** If the entire credible interval (the area between the red dashed lines) is above zero, it provides strong evidence that B is a true winner.
+
     ---
-    #### Plain-Language Summary
-    This section translates the statistical results into a clear business recommendation, telling you whether you can be confident in your decision to launch the winning variant.
+    #### The Plain-Language Summary
+    This final section translates all the statistics above into a clear, actionable business recommendation, helping you decide whether to launch the change.
     """)
