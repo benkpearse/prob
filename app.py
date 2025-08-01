@@ -146,8 +146,8 @@ st.markdown("---")
 if run_button:
     import altair as alt
 
-    # --- REWRITTEN PLOTTING FUNCTION ---
-    def plot_altair_charts(posteriors, results_df):
+    # --- SIMPLIFIED PLOTTING FUNCTION ---
+    def plot_posterior_chart(posteriors, results_df):
         # 1. Prepare data for the posterior density plot
         plot_data = []
         min_x = min(p.ppf(0.0001) for p in posteriors)
@@ -169,35 +169,10 @@ if run_button:
             color=alt.Color('Variant:N', scale=alt.Scale(scheme='tableau10'), title="Variant"),
             tooltip=[alt.Tooltip('Variant:N'), alt.Tooltip('Conversion Rate:Q', format='.3%')]
         ).properties(
-            title="Posterior Distributions"
+            title="Posterior Distributions of Conversion Rates"
         ).interactive()
-
-        # 3. Create the "Probability to be Best" bar chart
-        bars = alt.Chart(results_df).mark_bar().encode(
-            x=alt.X('Prob. to be Best:Q', axis=alt.Axis(format='%'), title="Probability to be Best"),
-            y=alt.Y('Variant:N', sort='-x', title=None),
-            color=alt.Color('Variant:N', scale=alt.Scale(scheme='tableau10'), legend=None),
-            tooltip=[alt.Tooltip('Variant:N'), alt.Tooltip('Prob. to be Best:Q', format='.2%')]
-        )
         
-        text = bars.mark_text(align='left', baseline='middle', dx=3).encode(
-            text=alt.Text('Prob. to be Best:Q', format=".2%")
-        )
-
-        # Use alt.layer() for robust chart composition
-        prob_best_chart = alt.layer(bars, text).properties(
-            title="Chance to be the Best Variant"
-        )
-        
-        # 4. Combine the charts
-        combined_chart = alt.hconcat(
-            posterior_chart, 
-            prob_best_chart.properties(width=300)
-        ).resolve_scale(
-            color='independent'
-        )
-        
-        return combined_chart
+        return posterior_chart
 
     if any(d['conversions'] > d['users'] for d in variant_data):
         st.error("Conversions cannot exceed the sample size for a variant.")
@@ -250,13 +225,14 @@ if run_button:
                 )
 
             st.subheader("Visualizations")
-            chart = plot_altair_charts(posteriors, results_df)
+            chart = plot_posterior_chart(posteriors, results_df)
             st.altair_chart(chart, use_container_width=True)
 else:
     st.info("Adjust the parameters in the sidebar and click 'Run Analysis', or load the example data to see how it works.")
 
 # 5. Explanations Section
 st.markdown("---")
+# --- UPDATED EXPLANATIONS SECTION ---
 with st.expander("ℹ️ How to interpret the results"):
     st.markdown("""
     #### The Key Metrics
@@ -265,17 +241,13 @@ with st.expander("ℹ️ How to interpret the results"):
     - **Credible Interval:** The range where the true uplift against the control likely falls. If this interval is entirely above zero, it's a strong sign that the variant beats the control.
     
     ---
-    #### The Visualizations
-    The charts provide a visual confirmation of the summary table.
-
-    - **Posterior Distributions (Left Chart):** This shows our belief about the true conversion rate for each variant after seeing the data.
-        - **What to look for:** Look for **separation** between the curves. The less the curves overlap, the more certain we are that a real difference exists. The curve that is furthest to the right is the likely winner.
-
-    - **Chance to be the Best Variant (Right Chart):** This is a bar chart of the "Probability to be Best" metric.
-        - **What to look for:** The **longest bar**. This quickly tells you which variant is the front-runner and by how much. It's the main takeaway of the entire analysis.
+    #### The Visualization: Posterior Distributions
+    The chart shows our belief about the true conversion rate for each variant after seeing the data.
+    - **What to look for:** Look for **separation** between the curves. The less the curves overlap, the more certain we are that a real difference exists. The curve that is furthest to the right belongs to the likely winning variant.
 
     ---
     #### How to Make a Decision
-    1.  Look for the variant with the highest **Probability to be Best**. Use the slider in the sidebar to set your decision threshold (e.g., 95%).
-    2.  Read the **Plain-Language Summary**, which will tell you if the winning variant met your threshold and if its uplift is reliably positive.
+    1.  Look for the variant with the highest **Probability to be Best** in the summary table.
+    2.  Use the slider in the sidebar to set your **decision threshold** (e.g., 95%).
+    3.  Read the **Plain-Language Summary**, which will tell you if the winning variant met your threshold and if its uplift is reliably positive.
     """)
