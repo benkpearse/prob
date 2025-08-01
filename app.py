@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from scipy.stats import beta, chisquare
-import matplotlib.pyplot as plt
+# Matplotlib is now imported only when needed
 
 # 1. Set Page Configuration
 st.set_page_config(
@@ -12,26 +12,35 @@ st.set_page_config(
 )
 
 # --- Core Calculation Functions ---
-@st.cache_data
+# UPDATED: Added 'credibility' to the function signature for correct caching
+@st.cache_data(persist="disk")
 def run_multivariant_analysis(variant_data, credibility):
     """
-    Performs Bayesian analysis for multiple variants.
-    Returns a DataFrame of results and a list of posterior objects.
+    Performs Bayesian analysis for multiple variants using vectorized operations.
     """
     alpha_prior, beta_prior = 1, 1
     samples = 30000
     num_variants = len(variant_data)
     
-    posteriors = []
-    for data in variant_data:
-        alpha_post = alpha_prior + data['conversions']
-        beta_post = beta_prior + data['users'] - data['conversions']
-        posteriors.append(beta(alpha_post, beta_post))
+    # UPDATED: Vectorized posterior parameter calculation
+    conversions = np.array([d['conversions'] for d in variant_data])
+    users = np.array([d['users'] for d in variant_data])
+    
+    alpha_posts = alpha_prior + conversions
+    beta_posts = beta_prior + users - conversions
 
     rng = np.random.default_rng(seed=42)
-    posterior_samples = [p.rvs(size=samples, random_state=rng) for p in posteriors]
     
-    stacked_samples = np.stack(posterior_samples)
+    # UPDATED: Vectorized sampling from beta distributions
+    # This draws all samples for all variants in a single, efficient operation
+    posterior_samples = beta.rvs(
+        alpha_posts, 
+        beta_posts, 
+        size=(samples, num_variants), 
+        random_state=rng
+    ).T # Transpose to get shape (num_variants, samples)
+
+    stacked_samples = posterior_samples
     best_variant_indices = np.argmax(stacked_samples, axis=0)
     prob_to_be_best = [np.mean(best_variant_indices == i) for i in range(num_variants)]
 
@@ -58,34 +67,11 @@ def run_multivariant_analysis(variant_data, credibility):
         })
 
     results_df = pd.DataFrame(results)
+    
+    # Recreate posterior objects for plotting, as they are lightweight
+    posteriors = [beta(a, b) for a, b in zip(alpha_posts, beta_posts)]
+    
     return results_df, posteriors
-
-# --- Plotting Function ---
-def plot_posteriors(posteriors, names):
-    """
-    Generates a plot of the posterior distributions for all variants.
-    """
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    plt.style.use('seaborn-v0_8-whitegrid')
-    
-    x = np.linspace(0, 1, 1000)
-    colors = plt.cm.viridis(np.linspace(0, 1, len(posteriors)))
-    
-    all_ppf_low = [p.ppf(0.001) for p in posteriors]
-    all_ppf_high = [p.ppf(0.999) for p in posteriors]
-
-    for i, post in enumerate(posteriors):
-        ax.plot(x, post.pdf(x), label=names[i], color=colors[i])
-        ax.fill_between(x, post.pdf(x), alpha=0.3, color=colors[i])
-
-    ax.set_xlim(min(all_ppf_low), max(all_ppf_high))
-    ax.set_title("Posterior Distributions of Conversion Rates")
-    ax.set_xlabel("Conversion Rate")
-    ax.set_ylabel("Density")
-    ax.legend()
-    ax.xaxis.set_major_formatter(plt.FuncFormatter('{:.2%}'.format))
-    
-    return fig
 
 # --- Example Data Function ---
 def load_example_data():
@@ -157,6 +143,32 @@ with st.sidebar:
 st.markdown("---")
 
 if run_button:
+    # UPDATED: Lazy-load matplotlib and define plotting function only when needed
+    import matplotlib.pyplot as plt
+
+    def plot_posteriors(posteriors, names):
+        fig, ax = plt.subplots(figsize=(9, 4.5))
+        plt.style.use('seaborn-v0_8-whitegrid')
+        
+        x = np.linspace(0, 1, 1000)
+        colors = plt.cm.viridis(np.linspace(0, 1, len(posteriors)))
+        
+        all_ppf_low = [p.ppf(0.001) for p in posteriors]
+        all_ppf_high = [p.ppf(0.999) for p in posteriors]
+
+        for i, post in enumerate(posteriors):
+            ax.plot(x, post.pdf(x), label=names[i], color=colors[i])
+            ax.fill_between(x, post.pdf(x), alpha=0.3, color=colors[i])
+
+        ax.set_xlim(min(all_ppf_low), max(all_ppf_high))
+        ax.set_title("Posterior Distributions of Conversion Rates")
+        ax.set_xlabel("Conversion Rate")
+        ax.set_ylabel("Density")
+        ax.legend()
+        ax.xaxis.set_major_formatter(plt.FuncFormatter('{:.2%}'.format))
+        
+        return fig
+
     if any(d['conversions'] > d['users'] for d in variant_data):
         st.error("Conversions cannot exceed the sample size for a variant.")
     else:
@@ -181,7 +193,6 @@ if run_button:
                 )
             )
 
-            # --- DYNAMIC PLAIN-LANGUAGE SUMMARY ---
             st.subheader("Plain-Language Summary")
             best_variant_row = results_df.loc[results_df['Prob. to be Best'].idxmax()]
             
@@ -189,21 +200,18 @@ if run_button:
             ci = best_variant_row['Credible Interval']
             best_variant_name = best_variant_row['Variant']
 
-            # Condition 1: Clear Winner
             if prob_best > 0.95 and ci[0] > 0:
                 st.success(
                     f"✅ **{best_variant_name} is a clear winner.** "
                     f"It has a **{prob_best:.1%}** chance of being the best option, and its credible interval "
                     f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero, indicating a reliable positive uplift over the control."
                 )
-            # Condition 2: Likely Winner, but uncertain magnitude
             elif prob_best > 0.90:
                  st.warning(
                     f"⚠️ **{best_variant_name} is the most likely winner, but the result is not conclusive.** "
                     f"While it has a strong **{prob_best:.1%}** chance of being the best, its credible interval "
                     f"**[{ci[0]:.2%}, {ci[1]:.2%}]** still overlaps with zero. This means we can't be certain about the size of the uplift."
                 )
-            # Condition 3: Inconclusive
             else:
                 st.info(
                     f"ℹ️ **The test is inconclusive.** No variant shows a high probability of being the best. "
