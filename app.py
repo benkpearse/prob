@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from scipy.stats import beta, chisquare
-# Altair and Matplotlib are now imported only when needed
+# Altair is now imported only when needed
 
 # 1. Set Page Configuration
 st.set_page_config(
@@ -144,7 +144,6 @@ with st.sidebar:
 st.markdown("---")
 
 if run_button:
-    # UPDATED: Lazy-load Altair for faster initial load
     import altair as alt
 
     def plot_altair_charts(posteriors, results_df):
@@ -167,32 +166,35 @@ if run_button:
             x=alt.X('Conversion Rate:Q', axis=alt.Axis(format='%', title='Conversion Rate')),
             y=alt.Y('Density:Q', title='Density'),
             color=alt.Color('Variant:N', scale=alt.Scale(scheme='tableau10'), title="Variant"),
-            tooltip=[
-                alt.Tooltip('Variant:N'),
-                alt.Tooltip('Conversion Rate:Q', format='.3%'),
-            ]
+            tooltip=[alt.Tooltip('Variant:N'), alt.Tooltip('Conversion Rate:Q', format='.3%')]
         ).properties(
             title="Posterior Distributions"
         ).interactive()
 
         # 3. Create the "Probability to be Best" bar chart
-        prob_best_chart = alt.Chart(results_df).mark_bar().encode(
+        base = alt.Chart(results_df).encode(
+            y=alt.Y('Variant:N', sort='-x', title=None)
+        )
+
+        bars = base.mark_bar().encode(
             x=alt.X('Prob. to be Best:Q', axis=alt.Axis(format='%'), title="Probability to be Best"),
-            y=alt.Y('Variant:N', sort='-x', title=None),
             color=alt.Color('Variant:N', scale=alt.Scale(scheme='tableau10'), legend=None),
             tooltip=[alt.Tooltip('Variant:N'), alt.Tooltip('Prob. to be Best:Q', format='.2%')]
-        ).properties(
-            title="Chance to be the Best Variant"
         )
         
-        text = prob_best_chart.mark_text(align='left', baseline='middle', dx=4).encode(
+        text = base.mark_text(align='left', baseline='middle', dx=4).encode(
+            x=alt.X('Prob. to be Best:Q'),
             text=alt.Text('Prob. to be Best:Q', format=".2%")
         )
 
-        # 4. Combine the charts side-by-side
+        prob_best_chart = (bars + text).properties(
+            title="Chance to be the Best Variant"
+        )
+        
+        # 4. Combine the charts
         combined_chart = alt.hconcat(
             posterior_chart, 
-            (prob_best_chart + text).properties(width=300)
+            prob_best_chart.properties(width=300)
         ).resolve_scale(
             color='independent'
         )
@@ -257,18 +259,27 @@ else:
 
 # 5. Explanations Section
 st.markdown("---")
-with st.expander("ℹ️ How to interpret these results"):
+# --- REWRITTEN EXPLANATIONS SECTION ---
+with st.expander("ℹ️ How to interpret the results"):
     st.markdown("""
-    #### Probability to be Best
-    This is the key metric in a multi-variant test. It represents the probability that each variant is the single best performer out of all options, including the control. A high "Prob. to be Best" is a strong indicator of a winner.
-
-    ---
-    #### Uplift vs. Control & Credible Interval
-    - **Uplift:** This shows the average estimated improvement of each variant compared **only to the control**.
+    #### The Key Metrics
+    - **Probability to be Best:** The chance that each variant is the single best performer out of all options. A high value is a strong indicator of a winner.
+    - **Uplift vs. Control:** The average estimated improvement of each variant compared **only to the control**.
     - **Credible Interval:** The range where the true uplift against the control likely falls. If this interval is entirely above zero, it's a strong sign that the variant beats the control.
     
     ---
+    #### The Visualizations
+    The charts provide a visual confirmation of the summary table.
+
+    - **Posterior Distributions (Left Chart):** This shows our belief about the true conversion rate for each variant after seeing the data.
+        - **What to look for:** Look for **separation** between the curves. The less the curves overlap, the more certain we are that a real difference exists. The curve that is furthest to the right is the likely winner.
+
+    - **Chance to be the Best Variant (Right Chart):** This is a bar chart of the "Probability to be Best" metric.
+        - **What to look for:** The **longest bar**. This quickly tells you which variant is the front-runner and by how much. It's the main takeaway of the entire analysis.
+
+    ---
     #### How to Make a Decision
-    1.  Look for the variant with the highest **Probability to be Best**. Use the slider in the sidebar to set your threshold for declaring a winner (95% is a common choice).
-    2.  Check that variant's **Credible Interval**. If it is entirely above zero, you can be confident that the uplift is positive.
+    1.  Look for the variant with the highest **Probability to be Best** (the longest bar in the right-hand chart).
+    2.  Use the slider in the sidebar to set your **decision threshold** (e.g., 95%).
+    3.  Read the **Plain-Language Summary**, which will tell you if the winning variant met your threshold and if its uplift is reliably positive.
     """)
