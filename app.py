@@ -12,18 +12,22 @@ st.set_page_config(
 )
 
 # --- Core Calculation Functions ---
+# UPDATED: The function now accepts a tuple of tuples for variant_data for reliable caching
 @st.cache_data(persist="disk")
-def run_multivariant_analysis(variant_data, credibility):
+def run_multivariant_analysis(variant_data_tuple, credibility, alpha_prior, beta_prior):
     """
     Performs Bayesian analysis for multiple variants using vectorized operations.
     """
-    alpha_prior, beta_prior = 1, 1
+    # Convert the input tuple back into a more usable list of dictionaries
+    variant_data = [{'name': v[0], 'users': v[1], 'conversions': v[2]} for v in variant_data_tuple]
+    
     samples = 30000
     num_variants = len(variant_data)
     
     conversions = np.array([d['conversions'] for d in variant_data])
     users = np.array([d['users'] for d in variant_data])
     
+    # BUG FIX: Removed hardcoded priors to ensure user inputs are used
     alpha_posts = alpha_prior + conversions
     beta_posts = beta_prior + users - conversions
 
@@ -36,14 +40,12 @@ def run_multivariant_analysis(variant_data, credibility):
         random_state=rng
     ).T
 
-    stacked_samples = posterior_samples
-    best_variant_indices = np.argmax(stacked_samples, axis=0)
-    prob_to_be_best = [np.mean(best_variant_indices == i) for i in range(num_variants)]
-
-    # --- Calculate Expected Loss (Regret) ---
     best_sample_rates = np.max(posterior_samples, axis=0)
     loss_samples = best_sample_rates - posterior_samples
     expected_loss = np.mean(loss_samples, axis=1)
+
+    best_variant_indices = np.argmax(posterior_samples, axis=0)
+    prob_to_be_best = [np.mean(best_variant_indices == i) for i in range(num_variants)]
 
     control_samples = posterior_samples[0]
     results = []
@@ -203,16 +205,33 @@ if run_button:
                 st.error("🚫 **Sample Ratio Mismatch (SRM) Detected** (p < 0.01). Results may be unreliable.")
         
         with st.spinner("Running Bayesian analysis..."):
-            results_df, posteriors = run_multivariant_analysis(variant_data, credibility, alpha_prior, beta_prior)
+            # UPDATED: Convert variant_data to a tuple for caching
+            variant_data_tuple = tuple((d['name'], d['users'], d['conversions']) for d in variant_data)
+            results_df, posteriors = run_multivariant_analysis(variant_data_tuple, credibility, alpha_prior, beta_prior)
             
             st.subheader("Results Summary")
+            st.markdown("##### Key Metrics Explained")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown("**Prob. to be Best** (?)", help="The chance that each variant is the single best performer.")
+            with col2:
+                st.markdown("**Expected Loss** (?)", help="The average amount you 'lose' by choosing this variant instead of the true best one. Lower is better.")
+            with col3:
+                st.markdown("**Uplift vs. Control** (?)", help="The average estimated improvement compared only to the control.")
+            with col4:
+                st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
+
+            display_df = results_df.copy()
+            display_df['Credible Interval'] = display_df['Credible Interval'].apply(
+                lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
+            )
+
             st.dataframe(
-                results_df.style.format({
+                display_df.style.format({
                     "Conversion Rate": "{:.2%}",
                     "Prob. to be Best": "{:.2%}",
                     "Expected Loss": "{:.4%}",
                     "Uplift vs. Control": "{:+.2%}",
-                    "Credible Interval": lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
                 }).background_gradient(
                     subset=["Prob. to be Best", "Uplift vs. Control"], cmap='Greens'
                 ).background_gradient(
@@ -260,6 +279,10 @@ if run_button:
                 )
 
             st.subheader("Visualizations")
+            st.markdown(
+                "**Posterior Distributions** (?)",
+                help="This chart shows our belief about the true conversion rate for each variant after seeing the data. Look for separation between the curves—the less they overlap, the more certain we are that a real difference exists."
+            )
             chart = plot_posterior_chart(posteriors, results_df)
             st.altair_chart(chart, use_container_width=True)
 else:
@@ -267,7 +290,6 @@ else:
 
 # 5. Explanations Section
 st.markdown("---")
-# --- REWRITTEN EXPLANATIONS SECTION ---
 with st.expander("ℹ️ About the Methodology"):
     st.markdown("""
     #### The Key Metrics Explained in Detail
