@@ -125,6 +125,14 @@ with st.sidebar:
         del st.session_state.example_conversions
 
     st.subheader("Settings")
+    
+    # NEW: Configurable probability threshold
+    prob_threshold = st.slider(
+        "Probability to be Best Threshold (%)",
+        min_value=80, max_value=99, value=95, step=1,
+        help="The 'Probability to be Best' a variant must exceed to be considered a winner."
+    ) / 100.0 # Convert to decimal for calculations
+    
     credibility = st.slider(
         "Credible Interval (%)", min_value=80, max_value=99, value=95, step=1,
         help="The confidence level for the uplift's credible interval. 95% is common."
@@ -137,7 +145,6 @@ with st.sidebar:
 st.markdown("---")
 
 if run_button:
-    # UPDATED: Lazy-load matplotlib and define plotting function only when needed
     import matplotlib.pyplot as plt
 
     def plot_posteriors(posteriors, names):
@@ -187,7 +194,7 @@ if run_button:
                 )
             )
 
-            # --- REWRITTEN DYNAMIC SUMMARY LOGIC ---
+            # --- UPDATED DYNAMIC SUMMARY LOGIC ---
             st.subheader("Plain-Language Summary")
             best_variant_row = results_df.loc[results_df['Prob. to be Best'].idxmax()]
             
@@ -195,31 +202,24 @@ if run_button:
             ci = best_variant_row['Credible Interval']
             best_variant_name = best_variant_row['Variant']
 
-            # Condition 1: Clear Winner (High confidence, positive uplift)
-            if prob_best > 0.95 and ci[0] > 0:
+            # Condition 1: Clear Winner (High confidence AND positive uplift)
+            if prob_best >= prob_threshold and ci[0] > 0:
                 st.success(
                     f"✅ **{best_variant_name} is a clear winner.** "
-                    f"It has a very high **{prob_best:.1%}** chance of being the best option, and its credible interval "
-                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero, indicating a reliable positive uplift over the control."
+                    f"It has a high **{prob_best:.1%}** chance of being the best (above your {prob_threshold:.0%} threshold), and its credible interval "
+                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero, indicating a reliable positive uplift."
                 )
-            # Condition 2: Likely Winner (Good confidence, positive uplift)
-            elif prob_best > 0.90 and ci[0] > 0:
-                st.success(
-                    f"✅ **{best_variant_name} is a strong contender.** "
-                    f"It has a high **{prob_best:.1%}** chance of being the best, and its credible interval "
-                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero. This provides good evidence of a positive uplift."
-                )
-            # Condition 3: Likely Winner, but uncertain magnitude (Good confidence, but CI overlaps zero)
-            elif prob_best > 0.90 and ci[0] <= 0:
+            # Condition 2: Likely Winner, but uncertain magnitude (High confidence BUT CI overlaps zero)
+            elif prob_best >= prob_threshold and ci[0] <= 0:
                  st.warning(
                     f"⚠️ **{best_variant_name} is the most likely winner, but the result is not conclusive.** "
                     f"While it has a strong **{prob_best:.1%}** chance of being the best, its credible interval "
                     f"**[{ci[0]:.2%}, {ci[1]:.2%}]** still overlaps with zero. This means we can't be certain about the size of the uplift."
                 )
-            # Condition 4: Inconclusive
+            # Condition 3: Inconclusive (Not enough confidence)
             else:
                 st.info(
-                    f"ℹ️ **The test is inconclusive.** No variant shows a high probability of being the best. "
+                    f"ℹ️ **The test is inconclusive.** No variant reached your **{prob_threshold:.0%}** threshold for being the best. "
                     f"While **{best_variant_name}** performed best in this test, its **{prob_best:.1%}** "
                     f"chance of being truly best is not high enough to declare a confident winner."
                 )
@@ -253,6 +253,6 @@ with st.expander("ℹ️ How to interpret these results"):
     
     ---
     #### How to Make a Decision
-    1.  Look for the variant with the highest **Probability to be Best**.
-    2.  Check that variant's **Uplift vs. Control** and **Credible Interval** to ensure the potential gain is meaningful and you are confident it's a real improvement over the baseline.
+    1.  Look for the variant with the highest **Probability to be Best**. Use the slider in the sidebar to set your threshold for declaring a winner (95% is a common choice).
+    2.  Check that variant's **Credible Interval**. If it is entirely above zero, you can be confident that the uplift is positive.
     """)
