@@ -193,6 +193,7 @@ if run_button:
             with col3:
                 st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
 
+            # --- CORRECTED DATAFRAME FORMATTING ---
             st.dataframe(
                 results_df.style.format({
                     "Conversion Rate": "{:.2%}",
@@ -204,7 +205,6 @@ if run_button:
                 )
             )
 
-            # --- REWRITTEN "TEST OUTCOME" SECTION ---
             st.subheader("Test Outcome")
             best_variant_row = results_df.loc[results_df['Prob. to be Best'].idxmax()]
             
@@ -212,23 +212,19 @@ if run_button:
             ci = best_variant_row['Credible Interval']
             best_variant_name = best_variant_row['Variant']
 
-            # Case 1: A variant is a clear winner
             if best_variant_name != "Control" and prob_best >= prob_threshold and ci[0] > 0:
                 st.success(
                     f"✅ **Outcome: Clear Winner.** {best_variant_name} is a clear winner because its "
                     f"**{prob_best:.2%}** chance of being the best is above your **{prob_threshold:.0%}** threshold, "
                     f"and its credible interval **[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely positive."
                 )
-            # Case 2: A variant is a likely winner, but with risk
             elif best_variant_name != "Control" and prob_best >= prob_threshold and ci[0] <= 0:
                  st.warning(
                     f"⚠️ **Outcome: Likely Winner, but Risk Remains.** {best_variant_name} is the most likely winner, as its "
                     f"**{prob_best:.2%}** chance of being best is above your **{prob_threshold:.0%}** threshold. "
                     f"However, its credible interval **[{ci[0]:.2%}, {ci[1]:.2%}]** still includes zero, indicating a risk of a neutral or negative outcome."
                 )
-            # Case 3: The control is a clear winner (a clear loser for variants)
             elif best_variant_name == "Control" and prob_best >= prob_threshold:
-                # Find the best-performing variant to report on its negative performance
                 variants_only_df = results_df[results_df['Variant'] != 'Control']
                 if not variants_only_df.empty:
                     top_variant_row = variants_only_df.loc[variants_only_df['Uplift vs. Control'].idxmax()]
@@ -239,10 +235,8 @@ if run_button:
                         f"The top variant, **{top_variant_name}**, showed a credible interval of **[{top_variant_ci[0]:.2%}, {top_variant_ci[1]:.2%}]**, "
                         "indicating it likely performs worse than the control."
                     )
-                else: # Should not happen in a test with >1 variant
+                else:
                     st.error(f"❌ **Outcome: Clear Loser.** The **Control** was the best performing option.")
-
-            # Case 4: Inconclusive
             else:
                 st.info(
                     f"ℹ️ **Outcome: Inconclusive.** The test is inconclusive because no variant (including the Control) reached your "
