@@ -126,12 +126,11 @@ with st.sidebar:
 
     st.subheader("Settings")
     
-    # NEW: Configurable probability threshold
     prob_threshold = st.slider(
         "Probability to be Best Threshold (%)",
         min_value=80, max_value=99, value=95, step=1,
         help="The 'Probability to be Best' a variant must exceed to be considered a winner."
-    ) / 100.0 # Convert to decimal for calculations
+    ) / 100.0
     
     credibility = st.slider(
         "Credible Interval (%)", min_value=80, max_value=99, value=95, step=1,
@@ -194,7 +193,6 @@ if run_button:
                 )
             )
 
-            # --- UPDATED DYNAMIC SUMMARY LOGIC ---
             st.subheader("Plain-Language Summary")
             best_variant_row = results_df.loc[results_df['Prob. to be Best'].idxmax()]
             
@@ -202,25 +200,23 @@ if run_button:
             ci = best_variant_row['Credible Interval']
             best_variant_name = best_variant_row['Variant']
 
-            # Condition 1: Clear Winner (High confidence AND positive uplift)
+            # UPDATED: Changed formatting from .1% to .2% to prevent misleading rounding
             if prob_best >= prob_threshold and ci[0] > 0:
                 st.success(
                     f"✅ **{best_variant_name} is a clear winner.** "
-                    f"It has a high **{prob_best:.1%}** chance of being the best (above your {prob_threshold:.0%} threshold), and its credible interval "
+                    f"It has a high **{prob_best:.2%}** chance of being the best (above your {prob_threshold:.0%} threshold), and its credible interval "
                     f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero, indicating a reliable positive uplift."
                 )
-            # Condition 2: Likely Winner, but uncertain magnitude (High confidence BUT CI overlaps zero)
             elif prob_best >= prob_threshold and ci[0] <= 0:
                  st.warning(
                     f"⚠️ **{best_variant_name} is the most likely winner, but the result is not conclusive.** "
-                    f"While it has a strong **{prob_best:.1%}** chance of being the best, its credible interval "
+                    f"While it has a strong **{prob_best:.2%}** chance of being the best, its credible interval "
                     f"**[{ci[0]:.2%}, {ci[1]:.2%}]** still overlaps with zero. This means we can't be certain about the size of the uplift."
                 )
-            # Condition 3: Inconclusive (Not enough confidence)
             else:
                 st.info(
                     f"ℹ️ **The test is inconclusive.** No variant reached your **{prob_threshold:.0%}** threshold for being the best. "
-                    f"While **{best_variant_name}** performed best in this test, its **{prob_best:.1%}** "
+                    f"While **{best_variant_name}** performed best in this test, its **{prob_best:.2%}** "
                     f"chance of being truly best is not high enough to declare a confident winner."
                 )
 
