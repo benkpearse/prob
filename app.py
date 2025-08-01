@@ -13,11 +13,10 @@ st.set_page_config(
 
 # --- Core Calculation Functions ---
 @st.cache_data(persist="disk")
-def run_multivariant_analysis(variant_data, credibility):
+def run_multivariant_analysis(variant_data, credibility, alpha_prior, beta_prior):
     """
     Performs Bayesian analysis for multiple variants using vectorized operations.
     """
-    alpha_prior, beta_prior = 1, 1
     samples = 30000
     num_variants = len(variant_data)
     
@@ -36,10 +35,19 @@ def run_multivariant_analysis(variant_data, credibility):
         random_state=rng
     ).T
 
-    stacked_samples = posterior_samples
-    best_variant_indices = np.argmax(stacked_samples, axis=0)
+    # --- Calculate Probability to be Best ---
+    best_variant_indices = np.argmax(posterior_samples, axis=0)
     prob_to_be_best = [np.mean(best_variant_indices == i) for i in range(num_variants)]
 
+    # --- Calculate Expected Loss (Regret) ---
+    # Find the best performing variant in each simulation sample
+    best_sample_rates = np.max(posterior_samples, axis=0)
+    # Calculate the loss for each variant in each sample (difference from the best)
+    loss_samples = best_sample_rates - posterior_samples
+    # Average the loss for each variant across all samples
+    expected_loss = np.mean(loss_samples, axis=1)
+
+    # --- Calculate Uplift and CI vs. Control ---
     control_samples = posterior_samples[0]
     results = []
     for i in range(num_variants):
@@ -58,6 +66,7 @@ def run_multivariant_analysis(variant_data, credibility):
             "Conversions": variant_data[i]['conversions'],
             "Conversion Rate": (variant_data[i]['conversions'] / variant_data[i]['users']) if variant_data[i]['users'] > 0 else 0,
             "Prob. to be Best": prob_to_be_best[i],
+            "Expected Loss": expected_loss[i],
             "Uplift vs. Control": mean_uplift,
             "Credible Interval": (ci_lower, ci_upper)
         })
@@ -124,6 +133,23 @@ with st.sidebar:
         del st.session_state.example_users
         del st.session_state.example_conversions
 
+    # --- NEW: Prior Selection ---
+    st.subheader("Prior Beliefs")
+    prior_mode = st.radio(
+        "Choose your prior",
+        ["Uninformative (Default)", "Informative (from data)"],
+        horizontal=True,
+        help="Use 'Uninformative' if you have no past data. Use 'Informative' to incorporate historical knowledge."
+    )
+    if prior_mode == "Informative (from data)":
+        hist_conv = st.number_input("Historical Conversions", min_value=0, value=100, step=1)
+        hist_users = st.number_input("Historical Users", min_value=1, value=2000, step=1)
+        alpha_prior = hist_conv
+        beta_prior = hist_users - hist_conv
+    else:
+        alpha_prior = 1
+        beta_prior = 1
+
     st.subheader("Settings")
     
     prob_threshold = st.slider(
@@ -181,33 +207,32 @@ if run_button:
                 st.error("🚫 **Sample Ratio Mismatch (SRM) Detected** (p < 0.01). Results may be unreliable.")
         
         with st.spinner("Running Bayesian analysis..."):
-            results_df, posteriors = run_multivariant_analysis(variant_data, credibility)
+            results_df, posteriors = run_multivariant_analysis(variant_data, credibility, alpha_prior, beta_prior)
             
             st.subheader("Results Summary")
+            # --- NEW: Key Metrics Explained Section ---
             st.markdown("##### Key Metrics Explained")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.markdown("**Prob. to be Best** (?)", help="The chance that each variant is the single best performer.")
             with col2:
-                st.markdown("**Uplift vs. Control** (?)", help="The average estimated improvement of each variant compared only to the control.")
+                st.markdown("**Expected Loss** (?)", help="The average amount you 'lose' by choosing this variant instead of the true best one. Lower is better.")
             with col3:
+                st.markdown("**Uplift vs. Control** (?)", help="The average estimated improvement compared only to the control.")
+            with col4:
                 st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
 
-            # --- NEW DATAFRAME FORMATTING LOGIC ---
-            # Create a copy for display purposes to not alter the original data
-            display_df = results_df.copy()
-            # Apply the formatting to the Credible Interval column, converting it to a string
-            display_df['Credible Interval'] = display_df['Credible Interval'].apply(
-                lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
-            )
-
             st.dataframe(
-                display_df.style.format({
+                results_df.style.format({
                     "Conversion Rate": "{:.2%}",
                     "Prob. to be Best": "{:.2%}",
+                    "Expected Loss": "{:.4%}",
                     "Uplift vs. Control": "{:+.2%}",
+                    "Credible Interval": lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
                 }).background_gradient(
                     subset=["Prob. to be Best", "Uplift vs. Control"], cmap='Greens'
+                ).background_gradient(
+                    subset=["Expected Loss"], cmap='Reds'
                 )
             )
 
@@ -265,11 +290,13 @@ st.markdown("---")
 with st.expander("ℹ️ About the Methodology"):
     st.markdown("""
     #### The Key Metrics
-    The summary table provides the core statistical outputs of the analysis. Hover over each metric's title in the "Key Metrics Explained" section for a detailed definition.
+    The summary table provides the core statistical outputs of the analysis. Hover over each metric's title for a detailed definition.
+
+    - **Expected Loss (or Regret):** This is a powerful decision-making metric that quantifies the **risk** of choosing a suboptimal variant. For each variant, it calculates the average "loss" you'd incur by picking it over the *true* best option. **The variant with the lowest expected loss is the safest bet.**
 
     ---
     #### The Visualization
-    The chart provides a visual confirmation of the summary table. It shows the **posterior distribution** for each variant, which represents our updated belief about the true conversion rate after seeing the data. The curve that is furthest to the right belongs to the likely winning variant.
+    The chart shows the **posterior distribution** for each variant, which represents our updated belief about the true conversion rate after seeing the data. The curve that is furthest to the right belongs to the likely winning variant.
 
     ---
     #### How the Test Outcome is Determined
