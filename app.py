@@ -193,13 +193,19 @@ if run_button:
             with col3:
                 st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
 
-            # --- CORRECTED DATAFRAME FORMATTING ---
+            # --- NEW DATAFRAME FORMATTING LOGIC ---
+            # Create a copy for display purposes to not alter the original data
+            display_df = results_df.copy()
+            # Apply the formatting to the Credible Interval column, converting it to a string
+            display_df['Credible Interval'] = display_df['Credible Interval'].apply(
+                lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
+            )
+
             st.dataframe(
-                results_df.style.format({
+                display_df.style.format({
                     "Conversion Rate": "{:.2%}",
                     "Prob. to be Best": "{:.2%}",
                     "Uplift vs. Control": "{:+.2%}",
-                    "Credible Interval": lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
                 }).background_gradient(
                     subset=["Prob. to be Best", "Uplift vs. Control"], cmap='Greens'
                 )
