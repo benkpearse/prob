@@ -146,9 +146,7 @@ st.markdown("---")
 if run_button:
     import altair as alt
 
-    # --- SIMPLIFIED PLOTTING FUNCTION ---
     def plot_posterior_chart(posteriors, results_df):
-        # 1. Prepare data for the posterior density plot
         plot_data = []
         min_x = min(p.ppf(0.0001) for p in posteriors)
         max_x = max(p.ppf(0.9999) for p in posteriors)
@@ -162,7 +160,6 @@ if run_button:
         
         plot_df = pd.DataFrame(plot_data)
 
-        # 2. Create the posterior density plot
         posterior_chart = alt.Chart(plot_df).mark_area(opacity=0.6).encode(
             x=alt.X('Conversion Rate:Q', axis=alt.Axis(format='%', title='Conversion Rate')),
             y=alt.Y('Density:Q', title='Density'),
@@ -187,6 +184,26 @@ if run_button:
             results_df, posteriors = run_multivariant_analysis(variant_data, credibility)
             
             st.subheader("Results Summary")
+
+            # --- NEW: Key Metrics Explained Section ---
+            st.markdown("##### Key Metrics Explained")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(
+                    "**Prob. to be Best** (?)",
+                    help="The chance that each variant is the single best performer out of all options. A high value is a strong indicator of a winner."
+                )
+            with col2:
+                st.markdown(
+                    "**Uplift vs. Control** (?)",
+                    help="The average estimated improvement of each variant compared only to the control."
+                )
+            with col3:
+                st.markdown(
+                    "**Credible Interval** (?)",
+                    help="The range where the true uplift against the control likely falls. If this interval is entirely above zero, it's a strong sign that the variant beats the control."
+                )
+
             st.dataframe(
                 results_df.style.format({
                     "Conversion Rate": "{:.2%}",
@@ -225,6 +242,11 @@ if run_button:
                 )
 
             st.subheader("Visualizations")
+            # --- NEW: Added help tooltip to the visualization header ---
+            st.markdown(
+                "**Posterior Distributions** (?)",
+                help="This chart shows our belief about the true conversion rate for each variant after seeing the data. Look for separation between the curves—the less they overlap, the more certain we are that a real difference exists."
+            )
             chart = plot_posterior_chart(posteriors, results_df)
             st.altair_chart(chart, use_container_width=True)
 else:
@@ -232,18 +254,14 @@ else:
 
 # 5. Explanations Section
 st.markdown("---")
-# --- UPDATED EXPLANATIONS SECTION ---
 with st.expander("ℹ️ How to interpret the results"):
     st.markdown("""
     #### The Key Metrics
-    - **Probability to be Best:** The chance that each variant is the single best performer out of all options. A high value is a strong indicator of a winner.
-    - **Uplift vs. Control:** The average estimated improvement of each variant compared **only to the control**.
-    - **Credible Interval:** The range where the true uplift against the control likely falls. If this interval is entirely above zero, it's a strong sign that the variant beats the control.
-    
+    The summary table provides the core statistical outputs of the analysis. Hover over each metric's title in the "Key Metrics Explained" section for a detailed definition.
+
     ---
-    #### The Visualization: Posterior Distributions
-    The chart shows our belief about the true conversion rate for each variant after seeing the data.
-    - **What to look for:** Look for **separation** between the curves. The less the curves overlap, the more certain we are that a real difference exists. The curve that is furthest to the right belongs to the likely winning variant.
+    #### The Visualization
+    The chart provides a visual confirmation of the summary table. It shows the **posterior distribution** for each variant, which represents our updated belief about the true conversion rate after seeing the data. The curve that is furthest to the right belongs to the likely winning variant.
 
     ---
     #### How to Make a Decision
