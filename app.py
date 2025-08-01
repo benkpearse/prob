@@ -65,7 +65,7 @@ def plot_posteriors(posteriors, names):
     """
     Generates a plot of the posterior distributions for all variants.
     """
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(9, 4.5))
     plt.style.use('seaborn-v0_8-whitegrid')
     
     x = np.linspace(0, 1, 1000)
@@ -79,7 +79,7 @@ def plot_posteriors(posteriors, names):
         ax.fill_between(x, post.pdf(x), alpha=0.3, color=colors[i])
 
     ax.set_xlim(min(all_ppf_low), max(all_ppf_high))
-    ax.set_title("Posterior Distributions")
+    ax.set_title("Posterior Distributions of Conversion Rates")
     ax.set_xlabel("Conversion Rate")
     ax.set_ylabel("Density")
     ax.legend()
@@ -101,7 +101,6 @@ st.markdown("This tool interprets A/B/n test results using Bayesian inference to
 with st.sidebar:
     st.header("Parameters")
 
-    # Use session_state to manage the number of variants
     if 'num_variants' not in st.session_state:
         st.session_state.num_variants = 2
 
@@ -117,7 +116,6 @@ with st.sidebar:
     st.subheader("Test Results")
     variant_data = []
     
-    # Check if example data has been loaded
     use_example = 'example_users' in st.session_state
 
     for i in range(st.session_state.num_variants):
@@ -128,7 +126,6 @@ with st.sidebar:
 
         st.markdown(f"**{variant_name}**")
         
-        # Set default values from session state if example is loaded
         default_users = st.session_state.example_users[i] if use_example and i < len(st.session_state.example_users) else 10000
         default_conversions = st.session_state.example_conversions[i] if use_example and i < len(st.session_state.example_conversions) else int(default_users * 0.05)
         
@@ -137,13 +134,12 @@ with st.sidebar:
             key=f"users_{i}", help="Total number of unique users in this variant."
         )
         conversions = st.number_input(
-            "Conversions", min_value=0, max_value=users,  # Proactive validation
+            "Conversions", min_value=0, max_value=users,
             value=min(default_conversions, users), step=10, 
             key=f"conv_{i}", help="Total number of unique users who converted in this variant."
         )
         variant_data.append({"name": variant_name, "users": users, "conversions": conversions})
     
-    # Clear example data from state after using it once
     if use_example:
         del st.session_state.example_users
         del st.session_state.example_conversions
@@ -161,40 +157,72 @@ with st.sidebar:
 st.markdown("---")
 
 if run_button:
-    # SRM Check
-    observed_counts = [d['users'] for d in variant_data]
-    if sum(observed_counts) > 0:
-        chi2_stat, p_value = chisquare(f_obs=observed_counts)
-        if p_value < 0.01:
-            st.error("🚫 **Sample Ratio Mismatch (SRM) Detected** (p < 0.01). Results may be unreliable.")
-    
-    with st.spinner("Running Bayesian analysis..."):
-        results_df, posteriors = run_multivariant_analysis(variant_data, credibility)
+    if any(d['conversions'] > d['users'] for d in variant_data):
+        st.error("Conversions cannot exceed the sample size for a variant.")
+    else:
+        observed_counts = [d['users'] for d in variant_data]
+        if sum(observed_counts) > 0:
+            chi2_stat, p_value = chisquare(f_obs=observed_counts)
+            if p_value < 0.01:
+                st.error("🚫 **Sample Ratio Mismatch (SRM) Detected** (p < 0.01). Results may be unreliable.")
         
-        st.subheader("Results Summary")
-        st.dataframe(
-            results_df.style.format({
-                "Conversion Rate": "{:.2%}",
-                "Prob. to be Best": "{:.2%}",
-                "Uplift vs. Control": "{:+.2%}",
-                "Credible Interval": lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
-            }).background_gradient(
-                subset=["Prob. to be Best", "Uplift vs. Control"], cmap='Greens'
+        with st.spinner("Running Bayesian analysis..."):
+            results_df, posteriors = run_multivariant_analysis(variant_data, credibility)
+            
+            st.subheader("Results Summary")
+            st.dataframe(
+                results_df.style.format({
+                    "Conversion Rate": "{:.2%}",
+                    "Prob. to be Best": "{:.2%}",
+                    "Uplift vs. Control": "{:+.2%}",
+                    "Credible Interval": lambda x: f"[{x[0]:.2%}, {x[1]:.2%}]"
+                }).background_gradient(
+                    subset=["Prob. to be Best", "Uplift vs. Control"], cmap='Greens'
+                )
             )
-        )
 
-        st.subheader("Plain-Language Summary")
-        best_variant = results_df.loc[results_df['Prob. to be Best'].idxmax()]
-        st.success(
-            f"**{best_variant['Variant']} is the most likely winner** with a "
-            f"**{best_variant['Prob. to be Best']:.1%}** chance of being the best option. "
-            f"It showed an average uplift of **{best_variant['Uplift vs. Control']:+.2%}** over the control."
-        )
+            # --- DYNAMIC PLAIN-LANGUAGE SUMMARY ---
+            st.subheader("Plain-Language Summary")
+            best_variant_row = results_df.loc[results_df['Prob. to be Best'].idxmax()]
+            
+            prob_best = best_variant_row['Prob. to be Best']
+            ci = best_variant_row['Credible Interval']
+            best_variant_name = best_variant_row['Variant']
 
-        st.subheader("Visualizations")
-        variant_names = [d['name'] for d in variant_data]
-        fig = plot_posteriors(posteriors, variant_names)
-        st.pyplot(fig)
+            # Condition 1: Clear Winner
+            if prob_best > 0.95 and ci[0] > 0:
+                st.success(
+                    f"✅ **{best_variant_name} is a clear winner.** "
+                    f"It has a **{prob_best:.1%}** chance of being the best option, and its credible interval "
+                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero, indicating a reliable positive uplift over the control."
+                )
+            # Condition 2: Likely Winner, but uncertain magnitude
+            elif prob_best > 0.90:
+                 st.warning(
+                    f"⚠️ **{best_variant_name} is the most likely winner, but the result is not conclusive.** "
+                    f"While it has a strong **{prob_best:.1%}** chance of being the best, its credible interval "
+                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** still overlaps with zero. This means we can't be certain about the size of the uplift."
+                )
+            # Condition 3: Inconclusive
+            else:
+                st.info(
+                    f"ℹ️ **The test is inconclusive.** No variant shows a high probability of being the best. "
+                    f"While **{best_variant_name}** performed best in this test, its **{prob_best:.1%}** "
+                    f"chance of being truly best is not high enough to declare a confident winner."
+                )
+
+            st.subheader("Visualizations")
+            st.markdown(
+                """
+                The chart below shows the **posterior distribution** for each variant. This represents our updated belief about the true conversion rate after seeing the data. 
+                
+                **Look for separation:** The less the curves overlap, the stronger the evidence that one variant is truly different from the others.
+                """
+            )
+
+            variant_names = [d['name'] for d in variant_data]
+            fig = plot_posteriors(posteriors, variant_names)
+            st.pyplot(fig)
 else:
     st.info("Adjust the parameters in the sidebar and click 'Run Analysis', or load the example data to see how it works.")
 
