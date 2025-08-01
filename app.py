@@ -146,6 +146,7 @@ st.markdown("---")
 if run_button:
     import altair as alt
 
+    # --- REWRITTEN PLOTTING FUNCTION ---
     def plot_altair_charts(posteriors, results_df):
         # 1. Prepare data for the posterior density plot
         plot_data = []
@@ -172,22 +173,19 @@ if run_button:
         ).interactive()
 
         # 3. Create the "Probability to be Best" bar chart
-        base = alt.Chart(results_df).encode(
-            y=alt.Y('Variant:N', sort='-x', title=None)
-        )
-
-        bars = base.mark_bar().encode(
+        bars = alt.Chart(results_df).mark_bar().encode(
             x=alt.X('Prob. to be Best:Q', axis=alt.Axis(format='%'), title="Probability to be Best"),
+            y=alt.Y('Variant:N', sort='-x', title=None),
             color=alt.Color('Variant:N', scale=alt.Scale(scheme='tableau10'), legend=None),
             tooltip=[alt.Tooltip('Variant:N'), alt.Tooltip('Prob. to be Best:Q', format='.2%')]
         )
         
-        text = base.mark_text(align='left', baseline='middle', dx=4).encode(
-            x=alt.X('Prob. to be Best:Q'),
+        text = bars.mark_text(align='left', baseline='middle', dx=3).encode(
             text=alt.Text('Prob. to be Best:Q', format=".2%")
         )
 
-        prob_best_chart = (bars + text).properties(
+        # Use alt.layer() for robust chart composition
+        prob_best_chart = alt.layer(bars, text).properties(
             title="Chance to be the Best Variant"
         )
         
@@ -259,7 +257,6 @@ else:
 
 # 5. Explanations Section
 st.markdown("---")
-# --- REWRITTEN EXPLANATIONS SECTION ---
 with st.expander("ℹ️ How to interpret the results"):
     st.markdown("""
     #### The Key Metrics
@@ -279,7 +276,6 @@ with st.expander("ℹ️ How to interpret the results"):
 
     ---
     #### How to Make a Decision
-    1.  Look for the variant with the highest **Probability to be Best** (the longest bar in the right-hand chart).
-    2.  Use the slider in the sidebar to set your **decision threshold** (e.g., 95%).
-    3.  Read the **Plain-Language Summary**, which will tell you if the winning variant met your threshold and if its uplift is reliably positive.
+    1.  Look for the variant with the highest **Probability to be Best**. Use the slider in the sidebar to set your decision threshold (e.g., 95%).
+    2.  Read the **Plain-Language Summary**, which will tell you if the winning variant met your threshold and if its uplift is reliably positive.
     """)
