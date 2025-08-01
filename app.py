@@ -13,10 +13,11 @@ st.set_page_config(
 
 # --- Core Calculation Functions ---
 @st.cache_data(persist="disk")
-def run_multivariant_analysis(variant_data, credibility, alpha_prior, beta_prior):
+def run_multivariant_analysis(variant_data, credibility):
     """
     Performs Bayesian analysis for multiple variants using vectorized operations.
     """
+    alpha_prior, beta_prior = 1, 1
     samples = 30000
     num_variants = len(variant_data)
     
@@ -35,19 +36,15 @@ def run_multivariant_analysis(variant_data, credibility, alpha_prior, beta_prior
         random_state=rng
     ).T
 
-    # --- Calculate Probability to be Best ---
-    best_variant_indices = np.argmax(posterior_samples, axis=0)
+    stacked_samples = posterior_samples
+    best_variant_indices = np.argmax(stacked_samples, axis=0)
     prob_to_be_best = [np.mean(best_variant_indices == i) for i in range(num_variants)]
 
     # --- Calculate Expected Loss (Regret) ---
-    # Find the best performing variant in each simulation sample
     best_sample_rates = np.max(posterior_samples, axis=0)
-    # Calculate the loss for each variant in each sample (difference from the best)
     loss_samples = best_sample_rates - posterior_samples
-    # Average the loss for each variant across all samples
     expected_loss = np.mean(loss_samples, axis=1)
 
-    # --- Calculate Uplift and CI vs. Control ---
     control_samples = posterior_samples[0]
     results = []
     for i in range(num_variants):
@@ -133,7 +130,6 @@ with st.sidebar:
         del st.session_state.example_users
         del st.session_state.example_conversions
 
-    # --- NEW: Prior Selection ---
     st.subheader("Prior Beliefs")
     prior_mode = st.radio(
         "Choose your prior",
@@ -210,18 +206,6 @@ if run_button:
             results_df, posteriors = run_multivariant_analysis(variant_data, credibility, alpha_prior, beta_prior)
             
             st.subheader("Results Summary")
-            # --- NEW: Key Metrics Explained Section ---
-            st.markdown("##### Key Metrics Explained")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.markdown("**Prob. to be Best** (?)", help="The chance that each variant is the single best performer.")
-            with col2:
-                st.markdown("**Expected Loss** (?)", help="The average amount you 'lose' by choosing this variant instead of the true best one. Lower is better.")
-            with col3:
-                st.markdown("**Uplift vs. Control** (?)", help="The average estimated improvement compared only to the control.")
-            with col4:
-                st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
-
             st.dataframe(
                 results_df.style.format({
                     "Conversion Rate": "{:.2%}",
@@ -276,10 +260,6 @@ if run_button:
                 )
 
             st.subheader("Visualizations")
-            st.markdown(
-                "**Posterior Distributions** (?)",
-                help="This chart shows our belief about the true conversion rate for each variant after seeing the data. Look for separation between the curves—the less they overlap, the more certain we are that a real difference exists."
-            )
             chart = plot_posterior_chart(posteriors, results_df)
             st.altair_chart(chart, use_container_width=True)
 else:
@@ -287,20 +267,28 @@ else:
 
 # 5. Explanations Section
 st.markdown("---")
+# --- REWRITTEN EXPLANATIONS SECTION ---
 with st.expander("ℹ️ About the Methodology"):
     st.markdown("""
-    #### The Key Metrics
-    The summary table provides the core statistical outputs of the analysis. Hover over each metric's title for a detailed definition.
-
-    - **Expected Loss (or Regret):** This is a powerful decision-making metric that quantifies the **risk** of choosing a suboptimal variant. For each variant, it calculates the average "loss" you'd incur by picking it over the *true* best option. **The variant with the lowest expected loss is the safest bet.**
+    #### The Key Metrics Explained in Detail
+    
+    **1. Probability to be Best**
+    - **What it is:** The probability that each variant is the single best performer out of all options. It is the primary metric for making a decision in a multi-variant test.
+    - **How to use it:** Look for the variant with the highest probability. If this value is above the decision threshold you set in the sidebar (e.g., 95%), you have a confident winner.
+    
+    **2. Expected Loss (or Regret)**
+    - **What it is:** A risk metric. It quantifies the average amount of conversion rate you might "lose" by choosing a specific variant if it isn't actually the best one. It's the opportunity cost of making the wrong decision.
+    - **How to use it:** The variant with the **lowest** expected loss is the safest, most robust choice. This is especially useful when the "Probability to be Best" is close between two variants. A low expected loss means the decision is low-risk.
+    
+    **3. Uplift vs. Control**
+    - **What it is:** The average estimated improvement of each variant when compared **only to the control group**.
+    - **How to use it:** This metric tells you the magnitude of the improvement over your baseline. It helps you understand if the winning variant's effect is large enough to be meaningful for your business.
+    
+    **4. Credible Interval**
+    - **What it is:** The range where we are confident the true uplift against the control lies. For example, a 95% credible interval of `[1%, 5%]` means we are 95% certain the true uplift is between 1% and 5%.
+    - **How to use it:** Check if the interval is entirely above zero. If it is, you can be confident that the variant has a positive effect. If it includes zero, you cannot rule out the possibility that the variant has no effect or even a negative one.
 
     ---
-    #### The Visualization
-    The chart shows the **posterior distribution** for each variant, which represents our updated belief about the true conversion rate after seeing the data. The curve that is furthest to the right belongs to the likely winning variant.
-
-    ---
-    #### How the Test Outcome is Determined
-    The outcome is decided by a two-step process based on your settings:
-    1.  First, it checks if the variant with the highest **Probability to be Best** meets the decision threshold you set in the sidebar.
-    2.  If it does, it then checks the winner's **Credible Interval** to assess the certainty of a positive uplift and the associated risk.
+    #### The Visualization: Posterior Distributions
+    The chart provides a visual confirmation of the summary table. It shows our updated belief about the true conversion rate for each variant after seeing the data. The curve that is furthest to the right belongs to the likely winning variant. **Look for separation between the curves**—the less they overlap, the more certain we are that a real difference exists.
     """)
