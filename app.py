@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from scipy.stats import beta, chisquare
-# Matplotlib is now imported only when needed
+import matplotlib.pyplot as plt
 
 # 1. Set Page Configuration
 st.set_page_config(
@@ -12,7 +12,6 @@ st.set_page_config(
 )
 
 # --- Core Calculation Functions ---
-# UPDATED: Added 'credibility' to the function signature for correct caching
 @st.cache_data(persist="disk")
 def run_multivariant_analysis(variant_data, credibility):
     """
@@ -22,7 +21,6 @@ def run_multivariant_analysis(variant_data, credibility):
     samples = 30000
     num_variants = len(variant_data)
     
-    # UPDATED: Vectorized posterior parameter calculation
     conversions = np.array([d['conversions'] for d in variant_data])
     users = np.array([d['users'] for d in variant_data])
     
@@ -31,14 +29,12 @@ def run_multivariant_analysis(variant_data, credibility):
 
     rng = np.random.default_rng(seed=42)
     
-    # UPDATED: Vectorized sampling from beta distributions
-    # This draws all samples for all variants in a single, efficient operation
     posterior_samples = beta.rvs(
         alpha_posts, 
         beta_posts, 
         size=(samples, num_variants), 
         random_state=rng
-    ).T # Transpose to get shape (num_variants, samples)
+    ).T
 
     stacked_samples = posterior_samples
     best_variant_indices = np.argmax(stacked_samples, axis=0)
@@ -67,8 +63,6 @@ def run_multivariant_analysis(variant_data, credibility):
         })
 
     results_df = pd.DataFrame(results)
-    
-    # Recreate posterior objects for plotting, as they are lightweight
     posteriors = [beta(a, b) for a, b in zip(alpha_posts, beta_posts)]
     
     return results_df, posteriors
@@ -193,6 +187,7 @@ if run_button:
                 )
             )
 
+            # --- REWRITTEN DYNAMIC SUMMARY LOGIC ---
             st.subheader("Plain-Language Summary")
             best_variant_row = results_df.loc[results_df['Prob. to be Best'].idxmax()]
             
@@ -200,18 +195,28 @@ if run_button:
             ci = best_variant_row['Credible Interval']
             best_variant_name = best_variant_row['Variant']
 
+            # Condition 1: Clear Winner (High confidence, positive uplift)
             if prob_best > 0.95 and ci[0] > 0:
                 st.success(
                     f"✅ **{best_variant_name} is a clear winner.** "
-                    f"It has a **{prob_best:.1%}** chance of being the best option, and its credible interval "
+                    f"It has a very high **{prob_best:.1%}** chance of being the best option, and its credible interval "
                     f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero, indicating a reliable positive uplift over the control."
                 )
-            elif prob_best > 0.90:
+            # Condition 2: Likely Winner (Good confidence, positive uplift)
+            elif prob_best > 0.90 and ci[0] > 0:
+                st.success(
+                    f"✅ **{best_variant_name} is a strong contender.** "
+                    f"It has a high **{prob_best:.1%}** chance of being the best, and its credible interval "
+                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero. This provides good evidence of a positive uplift."
+                )
+            # Condition 3: Likely Winner, but uncertain magnitude (Good confidence, but CI overlaps zero)
+            elif prob_best > 0.90 and ci[0] <= 0:
                  st.warning(
                     f"⚠️ **{best_variant_name} is the most likely winner, but the result is not conclusive.** "
                     f"While it has a strong **{prob_best:.1%}** chance of being the best, its credible interval "
                     f"**[{ci[0]:.2%}, {ci[1]:.2%}]** still overlaps with zero. This means we can't be certain about the size of the uplift."
                 )
+            # Condition 4: Inconclusive
             else:
                 st.info(
                     f"ℹ️ **The test is inconclusive.** No variant shows a high probability of being the best. "
