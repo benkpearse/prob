@@ -184,25 +184,14 @@ if run_button:
             results_df, posteriors = run_multivariant_analysis(variant_data, credibility)
             
             st.subheader("Results Summary")
-
-            # --- NEW: Key Metrics Explained Section ---
             st.markdown("##### Key Metrics Explained")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.markdown(
-                    "**Prob. to be Best** (?)",
-                    help="The chance that each variant is the single best performer out of all options. A high value is a strong indicator of a winner."
-                )
+                st.markdown("**Prob. to be Best** (?)", help="The chance that each variant is the single best performer.")
             with col2:
-                st.markdown(
-                    "**Uplift vs. Control** (?)",
-                    help="The average estimated improvement of each variant compared only to the control."
-                )
+                st.markdown("**Uplift vs. Control** (?)", help="The average estimated improvement of each variant compared only to the control.")
             with col3:
-                st.markdown(
-                    "**Credible Interval** (?)",
-                    help="The range where the true uplift against the control likely falls. If this interval is entirely above zero, it's a strong sign that the variant beats the control."
-                )
+                st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
 
             st.dataframe(
                 results_df.style.format({
@@ -215,7 +204,8 @@ if run_button:
                 )
             )
 
-            st.subheader("Plain-Language Summary")
+            # --- REWRITTEN "TEST OUTCOME" SECTION ---
+            st.subheader("Test Outcome")
             best_variant_row = results_df.loc[results_df['Prob. to be Best'].idxmax()]
             
             prob_best = best_variant_row['Prob. to be Best']
@@ -224,25 +214,24 @@ if run_button:
 
             if prob_best >= prob_threshold and ci[0] > 0:
                 st.success(
-                    f"✅ **{best_variant_name} is a clear winner.** "
-                    f"It has a high **{prob_best:.2%}** chance of being the best (above your {prob_threshold:.0%} threshold), and its credible interval "
-                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** is entirely above zero, indicating a reliable positive uplift."
+                    f"✅ **Outcome: Clear Winner.** {best_variant_name} is a clear winner because its "
+                    f"**{prob_best:.2%}** chance of being the best is above your **{prob_threshold:.0%}** threshold, "
+                    f"and its credible interval is entirely positive."
                 )
             elif prob_best >= prob_threshold and ci[0] <= 0:
                  st.warning(
-                    f"⚠️ **{best_variant_name} is the most likely winner, but the result is not conclusive.** "
-                    f"While it has a strong **{prob_best:.2%}** chance of being the best, its credible interval "
-                    f"**[{ci[0]:.2%}, {ci[1]:.2%}]** still overlaps with zero. This means we can't be certain about the size of the uplift."
+                    f"⚠️ **Outcome: Likely Winner, but Risk Remains.** {best_variant_name} is the most likely winner, as its "
+                    f"**{prob_best:.2%}** chance of being best is above your **{prob_threshold:.0%}** threshold. "
+                    f"However, the result is not conclusive because its credible interval still includes zero, indicating a risk of a neutral or negative outcome."
                 )
             else:
                 st.info(
-                    f"ℹ️ **The test is inconclusive.** No variant reached your **{prob_threshold:.0%}** threshold for being the best. "
-                    f"While **{best_variant_name}** performed best in this test, its **{prob_best:.2%}** "
-                    f"chance of being truly best is not high enough to declare a confident winner."
+                    f"ℹ️ **Outcome: Inconclusive.** The test is inconclusive because no variant reached your "
+                    f"**{prob_threshold:.0%}** threshold for being the best. While {best_variant_name} performed best, "
+                    f"there is not enough evidence to declare a confident winner."
                 )
 
             st.subheader("Visualizations")
-            # --- NEW: Added help tooltip to the visualization header ---
             st.markdown(
                 "**Posterior Distributions** (?)",
                 help="This chart shows our belief about the true conversion rate for each variant after seeing the data. Look for separation between the curves—the less they overlap, the more certain we are that a real difference exists."
@@ -254,7 +243,7 @@ else:
 
 # 5. Explanations Section
 st.markdown("---")
-with st.expander("ℹ️ How to interpret the results"):
+with st.expander("ℹ️ About the Methodology"):
     st.markdown("""
     #### The Key Metrics
     The summary table provides the core statistical outputs of the analysis. Hover over each metric's title in the "Key Metrics Explained" section for a detailed definition.
@@ -264,8 +253,8 @@ with st.expander("ℹ️ How to interpret the results"):
     The chart provides a visual confirmation of the summary table. It shows the **posterior distribution** for each variant, which represents our updated belief about the true conversion rate after seeing the data. The curve that is furthest to the right belongs to the likely winning variant.
 
     ---
-    #### How to Make a Decision
-    1.  Look for the variant with the highest **Probability to be Best** in the summary table.
-    2.  Use the slider in the sidebar to set your **decision threshold** (e.g., 95%).
-    3.  Read the **Plain-Language Summary**, which will tell you if the winning variant met your threshold and if its uplift is reliably positive.
+    #### How the Test Outcome is Determined
+    The outcome is decided by a two-step process based on your settings:
+    1.  First, it checks if the variant with the highest **Probability to be Best** meets the decision threshold you set in the sidebar.
+    2.  If it does, it then checks the winner's **Credible Interval** to assess the certainty of a positive uplift and the associated risk.
     """)
