@@ -12,13 +12,11 @@ st.set_page_config(
 )
 
 # --- Core Calculation Functions ---
-# UPDATED: The function now accepts a tuple of tuples for variant_data for reliable caching
 @st.cache_data(persist="disk")
 def run_multivariant_analysis(variant_data_tuple, credibility, alpha_prior, beta_prior):
     """
     Performs Bayesian analysis for multiple variants using vectorized operations.
     """
-    # Convert the input tuple back into a more usable list of dictionaries
     variant_data = [{'name': v[0], 'users': v[1], 'conversions': v[2]} for v in variant_data_tuple]
     
     samples = 30000
@@ -27,7 +25,6 @@ def run_multivariant_analysis(variant_data_tuple, credibility, alpha_prior, beta
     conversions = np.array([d['conversions'] for d in variant_data])
     users = np.array([d['users'] for d in variant_data])
     
-    # BUG FIX: Removed hardcoded priors to ensure user inputs are used
     alpha_posts = alpha_prior + conversions
     beta_posts = beta_prior + users - conversions
 
@@ -75,11 +72,25 @@ def run_multivariant_analysis(variant_data_tuple, credibility, alpha_prior, beta
     
     return results_df, posteriors
 
-# --- Example Data Function ---
+# --- Helper Functions for UI ---
 def load_example_data():
     st.session_state.num_variants = 3
     st.session_state.example_users = [10000, 10000, 10000]
     st.session_state.example_conversions = [500, 550, 520]
+
+def reset_inputs():
+    """Clears session state to reset the form."""
+    keys_to_delete = ['num_variants', 'example_users', 'example_conversions']
+    for key in keys_to_delete:
+        if key in st.session_state:
+            del st.session_state[key]
+    # Clear individual variant inputs if they exist
+    for i in range(10): # Max variants
+        if f"users_{i}" in st.session_state:
+            del st.session_state[f"users_{i}"]
+        if f"conv_{i}" in st.session_state:
+            del st.session_state[f"conv_{i}"]
+
 
 # 2. Page Title and Introduction
 st.title("📈 Multi-Variant Uplift Estimator")
@@ -99,8 +110,13 @@ with st.sidebar:
         help="Select the total number of groups in your test, including the control."
     )
     
-    st.button("Load Example Data", on_click=load_example_data, use_container_width=True)
-    
+    # --- NEW: Reset and Load Example Buttons ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.button("Load Example", on_click=load_example_data, use_container_width=True)
+    with col2:
+        st.button("Reset Inputs", on_click=reset_inputs, use_container_width=True)
+
     st.subheader("Test Results")
     variant_data = []
     
@@ -205,21 +221,22 @@ if run_button:
                 st.error("🚫 **Sample Ratio Mismatch (SRM) Detected** (p < 0.01). Results may be unreliable.")
         
         with st.spinner("Running Bayesian analysis..."):
-            # UPDATED: Convert variant_data to a tuple for caching
             variant_data_tuple = tuple((d['name'], d['users'], d['conversions']) for d in variant_data)
             results_df, posteriors = run_multivariant_analysis(variant_data_tuple, credibility, alpha_prior, beta_prior)
             
             st.subheader("Results Summary")
-            st.markdown("##### Key Metrics Explained")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.markdown("**Prob. to be Best** (?)", help="The chance that each variant is the single best performer.")
-            with col2:
-                st.markdown("**Expected Loss** (?)", help="The average amount you 'lose' by choosing this variant instead of the true best one. Lower is better.")
-            with col3:
-                st.markdown("**Uplift vs. Control** (?)", help="The average estimated improvement compared only to the control.")
-            with col4:
-                st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
+            # --- NEW: Visually grouped metrics explainer ---
+            with st.container(border=True):
+                st.markdown("##### Key Metrics Explained")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.markdown("**Prob. to be Best** (?)", help="The chance that each variant is the single best performer.")
+                with col2:
+                    st.markdown("**Expected Loss** (?)", help="The average amount you 'lose' by choosing this variant instead of the true best one. Lower is better.")
+                with col3:
+                    st.markdown("**Uplift vs. Control** (?)", help="The average estimated improvement compared only to the control.")
+                with col4:
+                    st.markdown("**Credible Interval** (?)", help="The range where the true uplift against the control likely falls.")
 
             display_df = results_df.copy()
             display_df['Credible Interval'] = display_df['Credible Interval'].apply(
