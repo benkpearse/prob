@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from scipy.stats import beta, chisquare
-import matplotlib.pyplot as plt
+# Altair and Matplotlib are now imported only when needed
 
 # 1. Set Page Configuration
 st.set_page_config(
@@ -144,30 +144,60 @@ with st.sidebar:
 st.markdown("---")
 
 if run_button:
-    import matplotlib.pyplot as plt
+    # UPDATED: Lazy-load Altair for faster initial load
+    import altair as alt
 
-    def plot_posteriors(posteriors, names):
-        fig, ax = plt.subplots(figsize=(9, 4.5))
-        plt.style.use('seaborn-v0_8-whitegrid')
-        
-        x = np.linspace(0, 1, 1000)
-        colors = plt.cm.viridis(np.linspace(0, 1, len(posteriors)))
-        
-        all_ppf_low = [p.ppf(0.001) for p in posteriors]
-        all_ppf_high = [p.ppf(0.999) for p in posteriors]
+    def plot_altair_charts(posteriors, results_df):
+        # 1. Prepare data for the posterior density plot
+        plot_data = []
+        min_x = min(p.ppf(0.0001) for p in posteriors)
+        max_x = max(p.ppf(0.9999) for p in posteriors)
+        x_zoom_range = np.linspace(min_x, max_x, 300)
 
         for i, post in enumerate(posteriors):
-            ax.plot(x, post.pdf(x), label=names[i], color=colors[i])
-            ax.fill_between(x, post.pdf(x), alpha=0.3, color=colors[i])
-
-        ax.set_xlim(min(all_ppf_low), max(all_ppf_high))
-        ax.set_title("Posterior Distributions of Conversion Rates")
-        ax.set_xlabel("Conversion Rate")
-        ax.set_ylabel("Density")
-        ax.legend()
-        ax.xaxis.set_major_formatter(plt.FuncFormatter('{:.2%}'.format))
+            variant_name = results_df['Variant'].iloc[i]
+            density = post.pdf(x_zoom_range)
+            for x, y in zip(x_zoom_range, density):
+                plot_data.append({"Variant": variant_name, "Conversion Rate": x, "Density": y})
         
-        return fig
+        plot_df = pd.DataFrame(plot_data)
+
+        # 2. Create the posterior density plot
+        posterior_chart = alt.Chart(plot_df).mark_area(opacity=0.6).encode(
+            x=alt.X('Conversion Rate:Q', axis=alt.Axis(format='%', title='Conversion Rate')),
+            y=alt.Y('Density:Q', title='Density'),
+            color=alt.Color('Variant:N', scale=alt.Scale(scheme='tableau10'), title="Variant"),
+            tooltip=[
+                alt.Tooltip('Variant:N'),
+                alt.Tooltip('Conversion Rate:Q', format='.3%'),
+            ]
+        ).properties(
+            title="Posterior Distributions"
+        ).interactive()
+
+        # 3. Create the "Probability to be Best" bar chart
+        prob_best_chart = alt.Chart(results_df).mark_bar().encode(
+            x=alt.X('Prob. to be Best:Q', axis=alt.Axis(format='%'), title="Probability to be Best"),
+            y=alt.Y('Variant:N', sort='-x', title=None),
+            color=alt.Color('Variant:N', scale=alt.Scale(scheme='tableau10'), legend=None),
+            tooltip=[alt.Tooltip('Variant:N'), alt.Tooltip('Prob. to be Best:Q', format='.2%')]
+        ).properties(
+            title="Chance to be the Best Variant"
+        )
+        
+        text = prob_best_chart.mark_text(align='left', baseline='middle', dx=4).encode(
+            text=alt.Text('Prob. to be Best:Q', format=".2%")
+        )
+
+        # 4. Combine the charts side-by-side
+        combined_chart = alt.hconcat(
+            posterior_chart, 
+            (prob_best_chart + text).properties(width=300)
+        ).resolve_scale(
+            color='independent'
+        )
+        
+        return combined_chart
 
     if any(d['conversions'] > d['users'] for d in variant_data):
         st.error("Conversions cannot exceed the sample size for a variant.")
@@ -200,7 +230,6 @@ if run_button:
             ci = best_variant_row['Credible Interval']
             best_variant_name = best_variant_row['Variant']
 
-            # UPDATED: Changed formatting from .1% to .2% to prevent misleading rounding
             if prob_best >= prob_threshold and ci[0] > 0:
                 st.success(
                     f"✅ **{best_variant_name} is a clear winner.** "
@@ -221,17 +250,8 @@ if run_button:
                 )
 
             st.subheader("Visualizations")
-            st.markdown(
-                """
-                The chart below shows the **posterior distribution** for each variant. This represents our updated belief about the true conversion rate after seeing the data. 
-                
-                **Look for separation:** The less the curves overlap, the stronger the evidence that one variant is truly different from the others.
-                """
-            )
-
-            variant_names = [d['name'] for d in variant_data]
-            fig = plot_posteriors(posteriors, variant_names)
-            st.pyplot(fig)
+            chart = plot_altair_charts(posteriors, results_df)
+            st.altair_chart(chart, use_container_width=True)
 else:
     st.info("Adjust the parameters in the sidebar and click 'Run Analysis', or load the example data to see how it works.")
 
